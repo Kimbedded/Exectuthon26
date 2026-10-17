@@ -4,3 +4,9 @@ __pycache__/
 .venv/
 .env
 *.db
+
+# Live device session data
+hardware/live_ui/runtime-state.json
+hardware/live_ui/hardware-events.jsonl
+hardware/build/
+hardware/live_ui/tts-events.jsonl

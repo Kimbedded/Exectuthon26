@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from database import init_db, list_expressions, save_expression
 from idk_client import interpret as interpret_ai
-from schemas import SavedTranslation, TranslationResult
+from schemas import SavedTranslation, TranslationResult, EnrichedTranslationResult, ButtonTranslationResult
 from translation_store import init_translation_store, list_translations, save_translation
 
 
@@ -55,8 +55,22 @@ def health():
     return {"status": "ok"}
 
 
+@app.post('/interpret/button', response_model=ButtonTranslationResult)
+def interpret_button(request: InterpretRequest):
+    return _interpret(request, include_choices=True)
+
+
+@app.post('/interpret/enriched' , response_model=EnrichedTranslationResult)
+def interpret_enriched(request: InterpretRequest):
+    return _interpret(request, include_expressions=True)
+
+
 @app.post("/interpret", response_model=TranslationResult)
 def interpret(request: InterpretRequest):
+    return _interpret(request)
+
+
+def _interpret(request: InterpretRequest, include_expressions: bool = False, include_choices: bool = False):
     try:
         return interpret_ai(
             transcript=request.transcript,
@@ -64,6 +78,8 @@ def interpret(request: InterpretRequest):
             target_language=request.target_language,
             source_language=request.source_language,
             elapsed_ms=request.elapsed_ms,
+            **({"include_expressions": True} if include_expressions else {}),
+            **({"include_choices": True} if include_choices else {}),
         )
     except TimeoutError as exc:
         raise HTTPException(status_code=504, detail="AI request timed out") from exc

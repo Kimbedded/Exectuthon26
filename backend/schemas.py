@@ -62,3 +62,23 @@ class TranslationResult(BaseModel):
 class SavedTranslation(TranslationResult):
     id: int
     created_at: str
+
+
+from typing import Literal
+class ExtractedExpression(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    type: Literal['idiom','slang','technical','word']
+    text: str = Field(min_length=1)
+    meaning: str = Field(min_length=1)
+
+class EnrichedTranslationResult(TranslationResult):
+    expressions: list[ExtractedExpression] = Field(max_length=4)
+
+
+class ButtonAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal['translation','literal','explanation']
+    text: str = Field(min_length=1)
+
+class ButtonTranslationResult(TranslationResult):
+    answers: list[ButtonAnswer] = Field(min_length=3, max_length=3)

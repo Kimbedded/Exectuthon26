@@ -223,3 +223,17 @@ this Git deployment connects the existing AI rather than improving its weights.
 Remaining deployment work is the teammate's actual network path, agreed conversation/session source,
 and any desired managed service/autostart. The local backend currently works while its temporary
 Mac process, board model server and ADB connection remain alive.
+
+## Optional live UI enrichment (local implementation)
+
+`POST /interpret/enriched` accepts the same request as `/interpret` and adds
+`expressions: [{"type":"idiom|slang|technical|word", "text":"verbatim source span", "meaning":"contextual explanation"}]`
+to the response (maximum 4). Translation and extraction use one Qwen generation.
+The original `/interpret` contract remains unchanged. The model can still make
+semantic or language errors; structural validation is not an accuracy guarantee.
+
+The local microphone dashboard on port 8010 now loads and warms the board ASR at
+server startup and keeps it resident across microphone start/stop. Its startup
+also sends a translation warm-up to the existing FastAPI/GenieX connection.
+The UI enables start only after preparation. Stop keeps models loaded; server
+shutdown releases its ASR worker while leaving the existing GenieX server intact.

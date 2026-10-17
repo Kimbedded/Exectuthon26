@@ -113,3 +113,65 @@ class ModelClientTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class EnrichedContractTests(unittest.TestCase):
+    def reply(self, body):
+        event={'choices':[{'delta':{'content':json.dumps(body,ensure_ascii=False)},'finish_reason':'stop'}]}
+        return io.BytesIO(('data: '+json.dumps(event)+'\ndata: [DONE]\n').encode())
+
+    def test_enriched_route_preserves_expressions(self):
+        result=dict(RESULT,expressions=[{'type':'word','text':'grounded','meaning':'외출 금지된'}])
+        with TestClient(main.app) as client, patch.object(main,'interpret_ai',return_value=result) as ai:
+            response=client.post('/interpret/enriched',json={'transcript':"You're grounded.",'target_language':'ko'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json(),result)
+        self.assertTrue(ai.call_args.kwargs['include_expressions'])
+
+    def test_extraction_cannot_copy_a_phrase_only_from_context(self):
+        body={'translation':'안녕하세요.','alternatives':[],
+              'expressions':[{'type':'idiom','text':'give it a shot','meaning':'시도하다'}]}
+        with patch.object(translate_sentence.urllib.request,'urlopen',return_value=self.reply(body)):
+            result=translate_sentence.translate('Hello.',context='Give it a shot.',include_expressions=True)
+        self.assertFalse(result['valid'])
+        self.assertIn('Invalid expression item',result['errors'])
+
+    def test_missing_expressions_is_not_silently_replaced(self):
+        with patch.object(translate_sentence.urllib.request,'urlopen',return_value=self.reply({'translation':'안녕','alternatives':[]})):
+            result=translate_sentence.translate('Hello.',include_expressions=True)
+        self.assertFalse(result['valid'])
+
+class TranslationWorkflowTests(unittest.TestCase):
+    def test_saved_translation_preserves_entire_ai_response(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(database,'DB_PATH',Path(tmp)/'test.db'):
+            with TestClient(main.app) as client:
+                saved=client.post('/translations',json=RESULT)
+                self.assertEqual(saved.status_code,201)
+                self.assertEqual({k:saved.json()[k] for k in RESULT},RESULT)
+                listed=client.get('/translations')
+                self.assertEqual(listed.status_code,200)
+                self.assertEqual(listed.json(),[saved.json()])
+
+    def test_button_route_requires_three_real_answers(self):
+        result=dict(RESULT,answers=[{'kind':kind,'text':text} for kind,text in
+            [('translation','외출 금지야.'),('literal','너는 외출 금지 상태야.'),('explanation','벌로 밖에 나가지 못한다는 뜻이야.')]])
+        with TestClient(main.app) as client, patch.object(main,'interpret_ai',return_value=result) as ai:
+            response=client.post('/interpret/button',json={'transcript':"You're grounded.",'target_language':'ko'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json(),result)
+        self.assertTrue(ai.call_args.kwargs['include_choices'])
+
+    def test_missing_model_answers_is_rejected(self):
+        stream=io.BytesIO(('data: '+json.dumps({'choices':[{'delta':{'content':json.dumps({'translation':'안녕','alternatives':[],'answers':[]})},'finish_reason':'stop'}]})+'\ndata: [DONE]\n').encode())
+        with patch.object(translate_sentence.urllib.request,'urlopen',return_value=stream):
+            response=translate_sentence.translate('Hello.',include_choices=True)
+        self.assertFalse(response['valid'])
+        self.assertIsNone(response['result'])
+
+class ButtonModelSchemaTests(unittest.TestCase):
+    def test_three_string_fields_are_mapped_without_rewriting_text(self):
+        body={'translation':'이 버튼을 테스트하고 있어요.','literal':'이 버튼을 시험해 보고 있습니다.','explanation':'사용 중인 버튼의 동작을 확인한다는 뜻입니다.'}
+        stream=io.BytesIO(('data: '+json.dumps({'choices':[{'delta':{'content':json.dumps(body)},'finish_reason':'stop'}]})+'\ndata: [DONE]\n').encode())
+        with patch.object(translate_sentence.urllib.request,'urlopen',return_value=stream):
+            response=translate_sentence.translate("I'm trying to test this button and also",include_choices=True)
+        self.assertTrue(response['valid'])
+        self.assertEqual([x['text'] for x in response['result']['answers']],[body['translation'],body['literal'],body['explanation']])

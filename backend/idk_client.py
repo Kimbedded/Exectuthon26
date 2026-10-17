@@ -19,7 +19,7 @@ def language_code(value):
         raise ValueError('Use a language code such as ko/en/es; this adapter maps only the listed language names')
     return code
 
-def interpret(transcript,context='',target_language='ko',*,source_language='en',elapsed_ms=None,endpoint=None):
+def interpret(transcript,context='',target_language='ko',*,source_language='en',elapsed_ms=None,endpoint=None,include_expressions=False,include_choices=False):
     source_language = language_code(source_language)
     target_language = language_code(target_language)
     with _INFERENCE_LOCK:
@@ -28,6 +28,8 @@ def interpret(transcript,context='',target_language='ko',*,source_language='en',
             endpoint=endpoint or os.environ.get('IDK_MODEL_ENDPOINT', 'http://127.0.0.1:18181/v1'),
             source_language=source_language, target_language=target_language,
             elapsed_ms=elapsed_ms, context=context,
+            include_expressions=include_expressions,
+            include_choices=include_choices,
         )
     if not response['valid']:
         raise RuntimeError('Invalid AI response: '+('; '.join(response['errors'])))
