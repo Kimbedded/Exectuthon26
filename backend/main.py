@@ -1,9 +1,13 @@
 from contextlib import asynccontextmanager
+import json
+from urllib.error import URLError
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from database import init_db, list_expressions, save_expression
+from idk_client import interpret as interpret_ai
+from schemas import TranslationResult
 
 
 @asynccontextmanager
@@ -16,6 +20,8 @@ app = FastAPI(title="IDK Button", lifespan=lifespan)
 
 
 class InterpretRequest(BaseModel):
+    source_language: str = Field(default="en", min_length=2, max_length=50)
+    elapsed_ms: int | None = Field(default=None, ge=0, strict=True)
     transcript: str = Field(min_length=1, max_length=3000)
     context: str = Field(default="", max_length=6000)
     target_language: str = Field(
@@ -47,14 +53,22 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/interpret")
+@app.post("/interpret", response_model=TranslationResult)
 def interpret(request: InterpretRequest):
-    return {
-        "status": "received",
-        "transcript": request.transcript,
-        "context": request.context,
-        "target_language": request.target_language
-    }
+    try:
+        return interpret_ai(
+            transcript=request.transcript,
+            context=request.context,
+            target_language=request.target_language,
+            source_language=request.source_language,
+            elapsed_ms=request.elapsed_ms,
+        )
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="AI request timed out") from exc
+    except (json.JSONDecodeError, RuntimeError, URLError) as exc:
+        raise HTTPException(status_code=502, detail="AI request failed") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post(

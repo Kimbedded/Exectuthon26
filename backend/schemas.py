@@ -39,3 +39,23 @@ class InterpretationResult(BaseModel):
                 )
 
         return self
+
+class TranslationAlternative(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    context: str = Field(min_length=1)
+    translation: str = Field(min_length=1)
+
+
+class TranslationResult(BaseModel):
+    """Current IDK API contract; confidence is null until calibrated."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    elapsed_ms: int | None = Field(ge=0)
+    source_language: str = Field(min_length=2)
+    target_language: str = Field(min_length=2)
+    source: str = Field(min_length=1)
+    translation_confidence: float | None = Field(ge=0, le=1)
+    translation: str = Field(min_length=1)
+    alternatives: list[TranslationAlternative] = Field(max_length=2)
