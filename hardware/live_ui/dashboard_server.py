@@ -167,16 +167,50 @@ def hardware_sample(value):
                 elif STATE['status'] not in {'starting','recording','stopping'}:start({})
                 else:analyze()
         except Exception as error:STATE['error']=str(error)
+def save_current_translation():
+    with LOCK:
+        if STATE['stage'] in {'thinking', 'transcribing'}:
+            raise ValueError('Wait for the current analysis to finish.')
+        result = (STATE.get('event') or {}).get('translation')
+        if not result:
+            raise ValueError('No translation to save yet.')
+        payload = {key: result[key] for key in (
+            'elapsed_ms', 'source_language', 'target_language',
+            'source', 'translation_confidence', 'translation', 'alternatives'
+        )}
+        body = json.dumps(payload, ensure_ascii=False).encode()
+    request = urllib.request.Request(
+        'http://127.0.0.1:8000/translations',
+        data=body,
+        headers={'Content-Type': 'application/json'}
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return json.load(response)
 
 class Handler(BaseHTTPRequestHandler):
     def reply(self,status,data,content_type='application/json; charset=utf-8'):
         raw=data if isinstance(data,bytes) else json.dumps(data,ensure_ascii=False).encode()
         self.send_response(status);self.send_header('Content-Type',content_type);self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
     def do_GET(self):
-        if self.path=='/':self.reply(200,(ROOT/'dashboard.html').read_bytes(),'text/html; charset=utf-8')
-        elif self.path=='/api/state':
-            with LOCK:self.reply(200,STATE)
-        else:self.reply(404,{'error':'Not found'})
+        if self.path == '/':
+            self.reply(200, (ROOT / 'dashboard.html').read_bytes(),
+                       'text/html; charset=utf-8')
+        elif self.path == '/api/state':
+            with LOCK:
+                self.reply(200, STATE)
+        elif self.path == '/api/translations':
+            try:
+                with urllib.request.urlopen(
+                    'http://127.0.0.1:8000/translations', timeout=10
+                ) as response:
+                    result = json.load(response)
+                self.reply(200, result)
+            except Exception:
+                self.reply(502, {
+                    'error': 'Could not load saved translations. Check that FastAPI is running.'
+                })
+        else:
+            self.reply(404, {'error': 'Not found'})
     def do_POST(self):
         origin=self.headers.get('Origin')
         if origin and origin not in {'http://127.0.0.1:8010','http://localhost:8010'}:self.reply(403,{'error':'Invalid origin'});return
@@ -185,6 +219,17 @@ class Handler(BaseHTTPRequestHandler):
             if not 0<=length<=2048:raise ValueError('Request too large')
             data=json.loads(self.rfile.read(length) or b'{}')
             if self.path=='/api/start':start(data)
+            elif self.path == '/api/save':
+                try:
+                    saved = save_current_translation()
+                except ValueError as error:
+                    self.reply(400, {'error': str(error)})
+                    return
+                except Exception:
+                    self.reply(502, {'error': 'Could not save translation. Check that FastAPI is running.'})
+                    return
+                self.reply(201, saved)
+                return
             elif self.path=='/api/stop':stop()
             elif self.path=='/api/analyze':analyze()
             elif self.path=='/api/speak':speak()
