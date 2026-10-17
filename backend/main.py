@@ -7,12 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from database import init_db, list_expressions, save_expression
 from idk_client import interpret as interpret_ai
-from schemas import TranslationResult
+from schemas import SavedTranslation, TranslationResult
+from translation_store import init_translation_store, list_translations, save_translation
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    init_translation_store()
     yield
 
 
@@ -86,3 +88,16 @@ def get_expressions(
     offset: int = Query(default=0, ge=0)
 ):
     return list_expressions(limit=limit, offset=offset)
+
+
+@app.post("/translations", response_model=SavedTranslation, status_code=201)
+def create_translation(request: TranslationResult):
+    return save_translation(request.model_dump())
+
+
+@app.get("/translations", response_model=list[SavedTranslation])
+def get_translations(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0)
+):
+    return list_translations(limit=limit, offset=offset)

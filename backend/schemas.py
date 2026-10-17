@@ -59,3 +59,6 @@ class TranslationResult(BaseModel):
     translation_confidence: float | None = Field(ge=0, le=1)
     translation: str = Field(min_length=1)
     alternatives: list[TranslationAlternative] = Field(max_length=2)
+class SavedTranslation(TranslationResult):
+    id: int
+    created_at: str
