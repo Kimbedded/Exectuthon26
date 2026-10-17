@@ -77,3 +77,9 @@ The running dashboard uses files in `outputs/asr-test/board-microphone/`. Review
 Only this project's FastAPI/dashboard were restarted; the existing GenieX model server was kept running. No model size change was made.
 
 Sources used to verify the Bridge/matrix approach: [Arduino's VENTUNO Q local assistant guide](https://docs.arduino.cc/tutorials/ventuno-q/local-ai-assistant), installed Arduino RouterBridge/LED Matrix/Modulino headers, and the existing working board demo.
+
+## Repeated playback and uncertain ASR
+
+Repeated short clicks during TTS interrupt the previous utterance and play the latest selected answer. Older player completion cannot reset the new player's state.
+
+Uncertain speech can show an original and an actual alternate ASR decoding beneath the transcript. Choose a candidate on the screen to retranslate it; the physical Knob still selects the three LLM answers. No correctness percentage is fabricated. Native Mac playback replacement and real-board ASR/candidate-to-LLM tests were executed. The alternate is not guaranteed to correct the original recognition.

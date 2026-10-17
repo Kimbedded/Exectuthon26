@@ -45,6 +45,7 @@ def main():
         subprocess.run(base+['reverse','tcp:8000','tcp:8000'],check=True)
     root='/home/arduino/asr-executorch-test'
     subprocess.run(base+['push',str(Path(__file__).with_name('live_board_audio.py')),root+'/live-mic/live_board_audio.py'],check=True)
+    subprocess.run(base+['push',str(Path(__file__).with_name('asr_uncertainty.py')),root+'/live-mic/asr_uncertainty.py'],check=True)
     command=['env','LD_LIBRARY_PATH='+root+'/qnn:/home/arduino/.local/share/geniex/qairt/htp-files:/home/arduino/.local/share/geniex',
         'ADSP_LIBRARY_PATH=/home/arduino/.local/share/geniex/qairt/htp-files','OMP_NUM_THREADS=4',root+'/venv/bin/python',
         root+'/live-mic/live_board_audio.py','--duration',str(args.duration),'--interval',str(args.interval),

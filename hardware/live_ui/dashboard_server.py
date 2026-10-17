@@ -9,7 +9,7 @@ from hardware_bridge import HardwareBridge
 ROOT=Path(__file__).resolve().parent
 LOCK=threading.RLock()
 STATE={'status':'loading','stage':'loading','model_status':'loading','level':None,'event':None,'history':[],'logs':[],'error':None,'session':0,'answers':[],'selected':0,'hardware':None,'hardware_error':None}
-PROCESS=None;SPEECH=None;SERIAL='3220953353';CLOSING=False;HARDWARE=None
+PROCESS=None;SPEECH=None;SPEECH_ID=0;SERIAL='3220953353';CLOSING=False;HARDWARE=None
 STAGES={'loading':3,'idle':0,'recording':1,'transcribing':2,'thinking':3,'ready':4,'speaking':5,'error':6}
 
 def display(selection=None):
@@ -41,6 +41,7 @@ def consume(proc):
                     STATE['event']=data;STATE['history']=(STATE['history']+[data])[-25:];STATE['error']=data.get('api_error')
                     answers=(data.get('translation') or {}).get('answers')
                     if answers:STATE['answers']=answers;display()
+                    elif (data.get('asr_quality') or {}).get('status')=='non_speech':STATE['answers']=[];STATE['selected']=0;display()
             else:
                 STATE['logs']=(STATE['logs']+[line])[-100:]
                 if line.startswith('READY:'):STATE['status']='recording';stage('recording')
@@ -75,7 +76,7 @@ def start(data):
         language=data.get('language','en');target=data.get('target_language','ko')
         if language not in {'en','ko'} or target not in {'en','ko'}:raise ValueError('Unsupported language')
         send({'action':'start','language':language,'target_language':target})
-        STATE.update(status='starting',level=None,event=None,history=[],error=None,session=STATE['session']+1,answers=[],selected=0,target_language=target)
+        STATE.update(status='starting',level=None,event=None,history=[],error=None,session=STATE['session']+1,answers=[],selected=0,target_language=target,source_language=language)
         stage('recording')
 
 def analyze():
@@ -89,28 +90,66 @@ def stop():
         if STATE['status'] in {'starting','recording'}:send({'action':'stop'});STATE['status']='stopping'
 
 def speak():
-    global SPEECH
+    global SPEECH,SPEECH_ID
     with LOCK:
         if not STATE['answers']:raise ValueError('아직 선택할 답변이 없습니다.')
-        if SPEECH is not None and SPEECH.poll() is None:return
         if STATE['stage'] in {'thinking','transcribing'}:raise ValueError('현재 분석 중입니다.')
+        if SPEECH is not None and SPEECH.poll() is None:SPEECH.terminate()
         text=STATE['answers'][STATE['selected']]['text']
         voice='Yuna (한국어(한국))' if STATE.get('target_language','ko')=='ko' else 'Samantha (영어(미국))'
+        SPEECH_ID+=1;request_id=SPEECH_ID
         SPEECH=subprocess.Popen(['/usr/bin/say','-v',voice,text],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True)
-        stage('speaking');proc=SPEECH
+        proc=SPEECH;STATE['error']=None
+        STATE['tts']={'request_id':request_id,'status':'playing','selected':STATE['selected']}
+        with (ROOT/'tts-events.jsonl').open('a') as f:f.write(json.dumps({'time':time.time(),**STATE['tts']})+'\n')
+        stage('speaking')
     def done():
         _,error=proc.communicate()
         with LOCK:
-            if CLOSING:return
+            status='interrupted' if proc is not SPEECH else 'error' if proc.returncode else 'completed'
+            with (ROOT/'tts-events.jsonl').open('a') as f:f.write(json.dumps({'time':time.time(),'request_id':request_id,'status':status,'exit_code':proc.returncode})+'\n')
+            # Completion from an interrupted player must not overwrite the new player.
+            if CLOSING or proc is not SPEECH:return
+            STATE['tts']['status']=status
             if proc.returncode:STATE['error']='TTS: '+error.strip();stage('error')
             else:stage('ready')
     threading.Thread(target=done,daemon=True).start()
+
+def choose_transcript(index):
+    with LOCK:
+        if STATE['stage'] in {'thinking','transcribing','speaking'}:raise ValueError('현재 작업이 끝난 뒤 선택하세요.')
+        row=STATE.get('event') or {}
+        primary=row.get('asr_primary_transcript',row.get('transcript'))
+        candidates=[primary]+[x['text'] for x in row.get('asr_alternatives',[])]
+        if type(index)!=int or not 0<=index<len(candidates) or not candidates[index]:raise ValueError('Invalid transcript candidate')
+        chosen=candidates[index];session=STATE['session'];STATE['error']=None
+        payload={'transcript':chosen,'context':'','source_language':STATE.get('source_language','en'),
+            'target_language':STATE.get('target_language','ko'),'elapsed_ms':row.get('elapsed_ms')}
+        original=dict(row);stage('thinking')
+    def translate_choice():
+        tick=time.perf_counter()
+        try:
+            request=urllib.request.Request('http://127.0.0.1:8000/interpret/button',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
+            with urllib.request.urlopen(request,timeout=180) as response:result=json.load(response);status=response.status
+            with LOCK:
+                if CLOSING or STATE['session']!=session:return
+                updated={**original,'asr_primary_transcript':primary,'transcript':chosen,'asr_selected_index':index,
+                    'translation':result,'http_status':status,'api_seconds':time.perf_counter()-tick}
+                updated.pop('api_error',None)
+                STATE['event']=updated;STATE['answers']=result['answers'];STATE['selected']=0
+                STATE['history']=(STATE['history']+[updated])[-25:];display(0);stage('ready')
+        except Exception as error:
+            with LOCK:
+                if CLOSING or STATE['session']!=session:return
+                STATE['error']=str(error);stage('error')
+    threading.Thread(target=translate_choice,daemon=True).start()
 
 def hardware_error(message):
     with LOCK:STATE['hardware_error']=message
 
 def hardware_sample(value):
     with LOCK:
+        if CLOSING:return
         previous=STATE['hardware'];STATE['hardware']=value;STATE['hardware_error']=None
         if not previous:return
         if STATE['answers']:STATE['selected']=min(value['selected'],len(STATE['answers'])-1)
@@ -124,7 +163,7 @@ def hardware_sample(value):
                 if STATE['status'] not in {'starting','recording','stopping'}:start({})
                 else:analyze()
             elif changed['clicks']>0:
-                if STATE['answers'] and STATE['stage']=='ready':speak()
+                if STATE['answers'] and STATE['stage'] in {'ready','speaking'}:speak()
                 elif STATE['status'] not in {'starting','recording','stopping'}:start({})
                 else:analyze()
         except Exception as error:STATE['error']=str(error)
@@ -149,6 +188,7 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path=='/api/stop':stop()
             elif self.path=='/api/analyze':analyze()
             elif self.path=='/api/speak':speak()
+            elif self.path=='/api/transcript':choose_transcript(data.get('index'))
             elif self.path=='/api/select':
                 with LOCK:
                     index=data.get('index')

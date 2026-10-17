@@ -75,10 +75,18 @@ The screen's existing `/api/*` routes are on port 8010, while storage routes are
 - Matrix: blinking recording block, ASR/LLM scan, answer number 1–3, pulsing number during TTS.
 - Stop recording using the screen's Stop button. Models remain loaded.
 
-The base Knob/matrix pipeline has been tested with real device input. Repeated playback handling and ASR uncertainty/alternate transcript work are being developed separately; this first upload contains the previously working screen/button baseline.
+The base Knob/matrix pipeline has been tested with real device input. Repeated clicks now interrupt older Mac TTS and play the latest selected answer. ASR review candidates are exposed separately from the three LLM answer cards; the Knob keeps selecting those LLM answers.
 
 ## Real-board storage verification
 
 `git pull --ff-only` advanced main to `9bc464a` before local integration. With `backend/examples/grounded-request.json`, the actual board model returned HTTP 200 and `translation: "당신은 징계당했습니다."`. That unmodified response was posted to `/translations` (201, id 3), then read back (200); every AI field matched exactly. The wording is model output, not a corrected reference translation.
 
 Validation: 15 backend tests and the hardware RPC argument regression test passed; actual MCU firmware compile/flash verification, rotation/click counters, matrix-frame changes and TTS process completion were checked. Browser visual automation was not performed.
+
+## ASR review extension
+
+`event.asr_confidence` remains null: no calibrated transcript-correctness score is available. `event.asr_quality` contains decoder heuristics and review reasons. On ambiguous speech, `event.asr_alternatives` can contain one actual alternate decoder path. This is not a beam-search N-best list or an LLM rewrite, and the alternate can still be wrong. Music/noise captions are not treated as spoken translation requests.
+
+The screen shows ASR candidates below the transcript. `POST /api/transcript` on port 8010 with `{ "index": 0 }` selects the original; index 1 selects the first actual alternative and calls the real board LLM again. It updates `event.translation`, so the same seven-field Save mapping still applies. `event.asr_primary_transcript` preserves the original, and `event.asr_selected_index` records the local selection. These ASR fields are not persisted by the current `/translations` schema.
+
+ASR scoring lives in `hardware/live_ui/asr_uncertainty.py`; actual alternate decoding is in `ASR._decode()` / `ASR.transcribe()` in `live_board_audio.py`. Thresholds are uncalibrated heuristics. A manual request is processed even when the recognized text matches the previous request.

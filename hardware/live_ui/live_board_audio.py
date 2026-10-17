@@ -11,6 +11,7 @@ import time
 import urllib.request
 import wave
 import sys
+from asr_uncertainty import quality
 
 import numpy as np
 import torch
@@ -44,19 +45,50 @@ class ASR:
         token='<|'+language+'|>'
         if token not in self.tokenizer.get_vocab():raise ValueError('Unsupported language token')
         self.prefix=[self.tokenizer.convert_tokens_to_ids(token),self.tokenizer.convert_tokens_to_ids('<|transcribe|>'),self.tokenizer.convert_tokens_to_ids('<|notimestamps|>')]
-    def transcribe(self,audio):
-        tick=time.perf_counter();ids=[];cur=self.start
+    def _decode(self,hidden,forced=None):
+        ids=[];scores=[];branches=[];cur=self.start;no_speech=0.
+        mask=torch.full((1,1,1,self.limit),-255.,dtype=torch.float32)
+        for pos in range(self.limit):
+            mask[0,0,0,pos]=0
+            logits=self.model.run_method('decoder',[torch.tensor([[cur]],dtype=torch.int64),mask,hidden,torch.tensor([pos],dtype=torch.int64)])[0][0,-1,:].float()
+            if pos==0:
+                token=self.tokenizer.convert_tokens_to_ids('<|nospeech|>')
+                no_speech=float(torch.exp(logits[token]-torch.logsumexp(logits,dim=0)).item())
+            if pos<len(self.prefix):cur=self.prefix[pos]
+            else:
+                values,indices=torch.topk(logits,2)
+                cur=int(forced[pos]) if forced is not None and pos<len(forced) else int(indices[0])
+                if cur<self.eos:
+                    scores.append(float((logits[cur]-torch.logsumexp(logits,dim=0)).item()))
+                    first,second=map(int,indices.tolist())
+                    pieces=[self.tokenizer.decode([x],skip_special_tokens=True) for x in [first,second]]
+                    if first<self.eos and second<self.eos and all(any(c.isalnum() for c in piece) for piece in pieces):
+                        branches.append({'position':pos,'alternative_token':second,'margin':float(values[0]-values[1])})
+            ids.append(cur)
+            if cur==self.eos:break
+        return {'ids':ids,'text':self.tokenizer.decode(ids,skip_special_tokens=True).strip(),
+            'average_logprob':sum(scores)/len(scores) if scores else None,
+            'branches':branches,'no_speech':no_speech,'truncated':ids[-1]!=self.eos}
+
+    def transcribe(self,audio,clipped_fraction=0.):
+        tick=time.perf_counter()
         with torch.inference_mode():
             features=self.processor(audio,sampling_rate=RATE,return_tensors='pt').input_features.contiguous()
             hidden=self.model.run_method('encoder',[features])[0]
-            mask=torch.full((1,1,1,self.limit),-255.,dtype=torch.float32)
-            for pos in range(self.limit):
-                mask[0,0,0,pos]=0
-                logits=self.model.run_method('decoder',[torch.tensor([[cur]],dtype=torch.int64),mask,hidden,torch.tensor([pos],dtype=torch.int64)])[0]
-                cur=self.prefix[pos] if pos<len(self.prefix) else int(torch.argmax(logits[0,-1,:]).item())
-                ids.append(cur)
-                if cur==self.eos:break
-        return {'transcript':self.tokenizer.decode(ids,skip_special_tokens=True).strip(),'asr_seconds':time.perf_counter()-tick,'asr_tokens':len(ids),'truncated':ids[-1]!=self.eos}
+            primary=self._decode(hidden)
+            margin=min((x['margin'] for x in primary['branches']),default=None)
+            diagnostic=quality(primary['text'],primary['average_logprob'],margin,primary['truncated'],clipped_fraction,primary['no_speech'])
+            alternatives=[]
+            if diagnostic['status']=='needs_review' and primary['branches']:
+                branch=min(primary['branches'],key=lambda x:x['margin'])
+                forced=primary['ids'][:branch['position']]+[branch['alternative_token']]
+                alternative=self._decode(hidden,forced)
+                alt_quality=quality(alternative['text'],alternative['average_logprob'],None,alternative['truncated'],no_speech_probability=alternative['no_speech'])
+                if alternative['text'] and ' '.join(alternative['text'].casefold().split())!=' '.join(primary['text'].casefold().split()) and not alternative['truncated'] and alt_quality['status']!='non_speech':
+                    alternatives.append({'text':alternative['text'],'average_token_logprob':alternative['average_logprob'],
+                        'method':'one second-best token branch, then greedy decoding','branch_position':branch['position']})
+        return {'transcript':primary['text'],'asr_seconds':time.perf_counter()-tick,'asr_tokens':len(primary['ids']),
+            'truncated':primary['truncated'],'asr_confidence':None,'asr_quality':diagnostic,'asr_alternatives':alternatives}
 
 def capture_session(a,asr,stop_event,trigger=None):
     if trigger is None:trigger=threading.Event();trigger.set()
@@ -109,8 +141,8 @@ def capture_session(a,asr,stop_event,trigger=None):
             if row['recent_rms']<a.silence_rms:row['status']='low_level_skip'
             else:
                 emit('PHASE',{'state':'transcribing'})
-                row.update(asr.transcribe(audio));row['status']='transcribed'
-                if row['transcript'] and not row['truncated'] and row['transcript']!=previous and not a.asr_only:
+                row.update(asr.transcribe(audio,clipped_fraction=row['clipped_fraction']));row['status']='transcribed'
+                if row['transcript'] and not row['truncated'] and row['asr_quality']['status']!='non_speech' and (a.manual or row['transcript']!=previous) and not a.asr_only:
                     request={'transcript':row['transcript'],'context':'','source_language':a.language,'target_language':a.target_language,'elapsed_ms':row['elapsed_ms']}
                     emit('PHASE',{'state':'thinking'})
                     started=time.perf_counter()
