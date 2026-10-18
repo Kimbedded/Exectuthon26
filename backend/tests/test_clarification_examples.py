@@ -73,7 +73,9 @@ class RequestedExamples(unittest.TestCase):
         rank.assert_not_called()
         payload=json.loads(json.loads(http.call_args.args[0].data)['messages'][1]['content'])
         self.assertIn('prepare or cook it',payload['TERM_HINTS']['make it'])
-        self.assertIsNone(result['result']['translation_confidence'])
+        # A human explicitly chose this meaning — maximal certainty, so this
+        # drives the green "certain" LED the same as a confident sampled vote.
+        self.assertEqual(result['result']['translation_confidence'],1.0)
 
 
 if __name__=='__main__':unittest.main()

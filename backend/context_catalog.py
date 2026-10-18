@@ -8,6 +8,10 @@ SENSES={
           ('A harbor for boats and ships','The topic is a maritime harbor for ships.',r'\b(ship|boat|harbor|cargo|sailing)\b|선박|항구')],
  'bank': [('A financial bank','The topic is a financial bank.',r'\b(money|loan|deposit|account|finance)\b|은행|대출'),
           ('The edge of a river','The topic is the bank alongside a river.',r'\b(river|stream|fishing|shore)\b|강둑|강가')],
+ # Demo scenario: "troubleshooting a machine" alone deliberately matches neither
+ # pattern below, so "Is it fixed?" stays ambiguous and asks rather than guessing.
+ 'fixed': [('Repaired, working again','The topic is whether something broken has been repaired.',r'\b(repair(?:ed|s|ing)?|broken|malfunction(?:ing)?|not\s+working|out\s+of\s+order)\b|고장|수리|고쳤'),
+           ('Securely attached in place','The topic is whether something is physically secured or mounted.',r'\b(bolt(?:ed)?|screw(?:ed)?|secure(?:d|ly)?|fasten(?:ed)?|attach(?:ed)?|mount(?:ed)?|tighten(?:ed)?|bracket|table|wall|frame)\b|고정|조여|나사')],
 }
 
 def catalog_decision(source,context):
@@ -36,3 +40,22 @@ def broad_clarification():
             'option_contexts':['The speaker is using words in a professional or technical context.',
                                'The speaker is using everyday, nontechnical meanings.'],
             'decision_method':'broad_context_fallback'}
+
+# Mirrors transcript_view.js's contextBadge() technical regex so the dashboard
+# badge and the backend auto-classification agree on what counts as technical.
+TECHNICAL_KEYWORDS=re.compile(
+    r'\b(electrical|circuits?|grounding|software|mechanical|engineering|network|hardware|'
+    r'computer|professional|technical|financial|voltage|pcb|wiring|router|server|database|'
+    r'code|programming|api|debug|compile|firmware)\b'
+    r'|전기|회로|접지|기계|조립|소프트웨어|하드웨어|네트워크|기술|전문|업무|금융|은행|서버|개발|프로그램|배포',
+    re.I)
+
+def classify_chat_mode(text):
+    """Deterministic keyword fallback: technical keywords -> Professional, else Casual.
+
+    Used only when neither the fixed sense catalog nor the model produces a
+    usable decision. No model call, no user prompt — most speech is casual, so
+    defaulting to Casual and only flagging Professional on a concrete keyword
+    hit keeps translation moving instead of asking a dead-end broad question.
+    """
+    return 'Professional' if TECHNICAL_KEYWORDS.search(text or '') else 'Casual'

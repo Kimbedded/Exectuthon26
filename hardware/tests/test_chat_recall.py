@@ -97,6 +97,43 @@ class ChatTests(unittest.TestCase):
    d.process_snapshot({'transcript':'Can you make it?'})
   thread.return_value.start.assert_called_once()
   self.assertIsNone(d.STATE['pending_context'])
+ def test_knob_click_on_a_ready_result_auto_saves_the_sentence(self):
+  d.STATE.update(hardware={'rotations':0,'clicks':0,'holds':0},answers=[{'kind':'translation','text':'x'}],
+                 snapshot_id='1:1',auto_saved_snapshot_id=None,pending_context=None,words=[])
+  with patch.object(d.threading,'Thread') as thread:
+   d.hardware_sample({'rotations':0,'clicks':1,'holds':0})
+  thread.assert_called_once_with(target=d.save_translation_safely,daemon=True)
+  thread.return_value.start.assert_called_once()
+ def test_repeated_clicks_on_the_same_result_do_not_resave_but_can_save_a_word(self):
+  d.STATE.update(hardware={'rotations':0,'clicks':0,'holds':0},answers=[{'kind':'translation','text':'x'}],
+                 snapshot_id='1:1',auto_saved_snapshot_id='1:1',pending_context=None,
+                 words=[{'word':'x','meaning':'y','status':'ready'}],word_index=0)
+  with patch.object(d.threading,'Thread') as thread:
+   d.hardware_sample({'rotations':0,'clicks':1,'holds':0})
+  thread.assert_called_once_with(target=d.save_word_safely,args=(0,d.STATE['generation']),daemon=True)
+ def test_rotation_alone_also_confirms_a_pending_choice(self):
+  # Workaround for an unreliable physical click: rotating still moves the
+  # selection (to 1, from 0 + delta 1 over 2 options) exactly as before, and
+  # that same rotation step now also confirms it — no separate click needed.
+  d.STATE.update(hardware={'rotations':0,'clicks':0,'holds':0},
+                 pending_context={'options':['A','B'],'snapshot_id':'1:1'},selected=0)
+  with patch.object(d,'choose_context') as choose:
+   d.hardware_sample({'rotations':1,'clicks':0,'holds':0})
+  choose.assert_called_once_with(1,'1:1')
+ def test_rotation_alone_also_auto_saves_a_ready_result(self):
+  d.STATE.update(hardware={'rotations':0,'clicks':0,'holds':0},answers=[{'kind':'translation','text':'x'}],
+                 snapshot_id='1:1',auto_saved_snapshot_id=None,pending_context=None,words=[])
+  with patch.object(d.threading,'Thread') as thread:
+   d.hardware_sample({'rotations':1,'clicks':0,'holds':0})
+  thread.assert_called_once_with(target=d.save_translation_safely,daemon=True)
+ def test_hold_alone_does_not_also_trigger_a_rotation_click(self):
+  # A hold starts a new chat; it must not also fire the rotation-as-click
+  # workaround just because the knob was turned while holding it down.
+  d.STATE.update(hardware={'rotations':0,'clicks':0,'holds':0},answers=[{'kind':'translation','text':'x'}],
+                 snapshot_id='1:1',auto_saved_snapshot_id=None,pending_context=None,words=[])
+  with patch.object(d,'new_chat') as new,patch.object(d,'save_translation_safely') as save:
+   d.hardware_sample({'rotations':1,'clicks':0,'holds':1})
+  new.assert_called_once();save.assert_not_called()
  def test_category_choice_is_kept_for_following_sentences(self):
   d.STATE.update(chat_mode=None,pending_context={'kind':'chat_mode','snapshot_id':'test'},snapshot_id='test',event={'transcript':'hello'})
   with patch.object(d,'process_snapshot') as process:d.choose_context(0,'test')

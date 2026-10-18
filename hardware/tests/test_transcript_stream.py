@@ -40,11 +40,11 @@ class SentenceLedgerTests(unittest.TestCase):
   ledger.update('A later sentence.',start_ms=2000,end_ms=3000)
   view=ledger.update('A later sentence.',start_ms=2000,end_ms=4000)
   self.assertEqual(view['confirmed_sentences'],['First sentence.','A later sentence.'])
- def test_model_context_uses_at_most_five_sentences_including_source(self):
+ def test_model_context_uses_at_most_three_sentences_including_source(self):
   row={'transcript':'One. Two. Three. Four. Five. Six. Latest sentence.', 'frozen_sentence_context':'Older unrelated topic.'}
   request=sentence_request(row)
   self.assertEqual(request['transcript'],'Latest sentence.')
-  self.assertEqual(request['context'],'Three. Four. Five. Six.')
+  self.assertEqual(request['context'],'Five. Six.')
   self.assertEqual(sentence_request(row,'time'),{'transcript':row['transcript'],'context':''})
  def test_frozen_decode_keeps_newer_context_instead_of_stale_live_topic(self):
   row={'transcript':'This electrical circuit has intermittent voltage. Check the ground.',

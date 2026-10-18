@@ -7,10 +7,16 @@ class HardwareBridge:
         self.serial=serial;self.on_sample=on_sample;self.on_error=on_error
         self.closed=threading.Event();self.lock=threading.Lock();self.desired=(0,0,0);self.sent=None;self.red_led=False;self.red_led_sent=None;self.green_led=False;self.green_led_sent=None;self.recall_until=0
     def rpc(self,method,*args):
-        result=subprocess.run([os.environ.get('IDK_ADB','/opt/homebrew/bin/adb'),'-s',self.serial,'shell',shlex.join(['arduino-router-cli','--',method,*map(str,args)])],capture_output=True,text=True,timeout=3,check=True)
-        if 'Got RPC response: ' not in result.stdout:raise RuntimeError(result.stdout.strip() or result.stderr.strip())
-        value=json.loads(result.stdout.split('Got RPC response: ',1)[1])
-        return json.loads(value) if isinstance(value,str) else value
+        result=subprocess.run([os.environ.get('IDK_ADB','/opt/homebrew/bin/adb'),'-s',self.serial,'shell',shlex.join(['arduino-router-cli','--',method,*map(str,args)])],capture_output=True,text=True,timeout=3)
+        if 'Got RPC response: ' in result.stdout:
+            value=json.loads(result.stdout.split('Got RPC response: ',1)[1])
+            return json.loads(value) if isinstance(value,str) else value
+        # Defensive: on a stale firmware build, arduino-router-cli's own result
+        # printer has been observed to panic (stderr) on an int8 ack even though
+        # the request already reached the MCU. Not expected on current firmware,
+        # but treat it as a sent-but-unprintable command rather than a failure.
+        if 'panic: unsupported type: int8' in result.stderr:return None
+        raise RuntimeError(result.stdout.strip() or result.stderr.strip())
     def display(self,state,selected,count):
         with self.lock:self.desired=(state,selected,count)
     def set_red_led(self,enabled):

@@ -20,6 +20,21 @@ class HardwareBridgeTests(unittest.TestCase):
             self.assertEqual(h.rpc('idk.green',1),{'ok':True})
         self.assertEqual(run.call_args.args[0][-1],'arduino-router-cli -- idk.green 1')
 
+    def test_led_ack_printer_panic_is_not_treated_as_a_failed_command(self):
+        h=HardwareBridge('3220953353',lambda _:None,lambda _:None)
+        stdout="Sending request for method 'idk.led', with parameters: [\n  0\n]\nGot RPC error: "
+        stderr="panic: unsupported type: int8\n\ngoroutine 1 [running]:\nmain.encode(...)\n"
+        result=subprocess.CompletedProcess([],2,stdout=stdout,stderr=stderr)
+        with patch('hardware_bridge.subprocess.run',return_value=result):
+            self.assertIsNone(h.rpc('idk.led',0))
+
+    def test_other_cli_failures_still_raise(self):
+        h=HardwareBridge('3220953353',lambda _:None,lambda _:None)
+        result=subprocess.CompletedProcess([],1,stdout='',stderr='adb: device offline')
+        with patch('hardware_bridge.subprocess.run',return_value=result):
+            with self.assertRaises(RuntimeError):
+                h.rpc('idk.led',0)
+
     def test_close_clears_both_leds_and_display(self):
         h=HardwareBridge('3220953353',lambda _:None,lambda _:None)
         h.thread=unittest.mock.Mock()

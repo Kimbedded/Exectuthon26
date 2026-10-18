@@ -23,6 +23,14 @@ Open http://127.0.0.1:8010 on the USB-connected Mac. The server prepares Qwen an
 - Hold at least 800 ms during recording: analyze the current rolling context again.
 - Hold when stopped: start recording.
 - Stop recording using the UI's Stop button. Closing the page does not stop capture.
+- **Any rotation step also acts as a click** (workaround for an unreliable physical click):
+  it still moves the selection exactly as before, and that same step now also confirms it —
+  a separate press is not required. A hold never also triggers this.
+- **Pressing the knob (or rotating) on a finished translation auto-saves that sentence**, once
+  per result (`auto_saved_snapshot_id` guards against duplicate saves on repeated presses). The
+  saved sentence appears immediately in the "Saved sentences" strip at the bottom of the
+  dashboard. This takes priority over the existing word-save click, which still applies once
+  nothing is left to save.
 
 The first successful response is held for selection; the next analysis is explicit. Audio capture continues into a bounded 30-second ring while selecting a result. ASR and LLM inference remain sequential. The model is not reloaded per click.
 

@@ -99,4 +99,4 @@ def sentence_request(row, mode='sentences'):
     # older topic. The ledger still supplies context for a one-sentence window.
     history=units[:-1] or sentence_units(row.get('frozen_sentence_context',''))
     if history and similar(history[-1][0],source):history=history[:-1]
-    return {'transcript':source,'context':' '.join(x[0] for x in history[-4:])}
+    return {'transcript':source,'context':' '.join(x[0] for x in history[-2:])}

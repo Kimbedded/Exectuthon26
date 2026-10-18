@@ -15,6 +15,13 @@ class QualityTests(unittest.TestCase):
   self.assertEqual(quality('The audio is blank.',-.1,2.,False)['status'],'normal')
  def test_clear_text_without_flags(self):
   self.assertEqual(quality('hello',-.1,2.,False)['status'],'normal')
+ def test_repetition_loop_is_treated_as_non_speech_not_translated(self):
+  # A decoder stuck repeating a word ("yeah yeah yeah...") makes the
+  # translation model mirror the loop until it 502s on max_tokens; block it
+  # the same as blank audio instead of forwarding it for translation.
+  r=quality(' '.join(['yeah']*60),-.1,2.,False)
+  self.assertEqual(r['status'],'non_speech')
+  self.assertIn('repetitive_output',r['reasons'])
  def test_clipping_and_truncation_are_recorded(self):
   r=quality('hello',-.1,2.,True,.1)
   self.assertIn('audio_clipping',r['reasons']);self.assertIn('decoder_limit',r['reasons'])

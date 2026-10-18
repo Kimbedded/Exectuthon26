@@ -4,7 +4,7 @@ from difflib import SequenceMatcher
 from idk_client import _INFERENCE_LOCK
 from model_transport import open_model_request
 from translate_sentence import MODEL, select_last_sentence
-from context_catalog import catalog_decision, broad_clarification
+from context_catalog import catalog_decision, classify_chat_mode
 from phrase_context import phrase_decision
 from sense_probability import rank_senses
 
@@ -54,6 +54,14 @@ def with_likelihood(decision, source, context, endpoint):
             by_label = {sense['gloss_en']: share for sense, share in ranking['ranked']}
             likelihood.update(method='model_vote_share', shares=[by_label[label] for label in options],
                               valid_samples=valid, requested_samples=ranking['requested_samples'])
+            if ranking['auto_resolved']:
+                top_sense, top_share = ranking['ranked'][0]
+                index = options.index(top_sense['gloss_en'])
+                option_contexts = decision.get('option_contexts') or [None] * len(options)
+                return {**decision, 'needs_clarification': False, 'topic': option_contexts[index] or top_sense['gloss_en'],
+                        'evidence': '', 'question': None, 'options': [], 'selected_option': index,
+                        'decision_method': decision.get('decision_method', 'reviewed_word_senses') + '_vote_resolved',
+                        'likelihood': likelihood}
     except (OSError, ValueError, KeyError, IndexError, TypeError, RuntimeError):
         pass  # A useful clarification question does not require vote estimates.
     return {**decision, 'likelihood': likelihood}
@@ -88,6 +96,12 @@ def resolve_context(transcript, context='', endpoint=None):
                     and SequenceMatcher(None,*options).ratio()<.7):
                     decision=proposed;decision['decision_method']='qwen_context_options'
         except (ValueError,TypeError,KeyError):pass
-    if decision is None:decision=broad_clarification()
+    # Asking a broad Casual/Professional question here is a dead end for most
+    # ordinary sentences. Auto-classify via the technical-keyword lexicon and
+    # proceed instead of blocking translation on an unanswerable question.
+    if decision is None:
+        mode=classify_chat_mode(previous+' '+selected['target'])
+        decision={'needs_clarification':False,'topic':mode,'evidence':'','question':None,
+                  'options':[],'decision_method':'lexicon_chat_mode'}
     return {**with_likelihood(decision,selected['target'],previous,endpoint),
             'source':selected['target'],'context':previous}

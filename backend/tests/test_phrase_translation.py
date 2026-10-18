@@ -50,8 +50,21 @@ class PhraseAlternativeTests(unittest.TestCase):
              patch.object(m.urllib.request, 'urlopen', return_value=stream):
             result = m.translate("I'm cooking dinner, can you make it tonight?")
         self.assertTrue(result['valid'])
-        self.assertIsNone(result['result']['translation_confidence'])
+        # A lopsided, consistent sampled vote (auto_resolved) sets confidence —
+        # this is what turns the green "certain" LED on; see dashboard_server.py's
+        # translation_is_certain(). Below-threshold votes keep it null (see the
+        # test above).
+        self.assertEqual(result['result']['translation_confidence'], 0.95)
         self.assertEqual(result['result']['alternatives'], [])
+
+    def test_reviewed_rule_resolution_also_sets_full_confidence(self):
+        stream = sse({'translation': '저녁에 올 수 있어요?', 'alternatives': []})
+        with patch.object(m, 'rank_senses') as ranker, \
+             patch.object(m.urllib.request, 'urlopen', return_value=stream):
+            result = m.translate("Dinner tonight, can you make it at 8?")
+        self.assertTrue(result['valid'])
+        self.assertEqual(result['result']['translation_confidence'], 1.0)
+        ranker.assert_not_called()  # phrase_context.py's explicit-evidence rule resolved it; no sampling needed.
 
     def test_sentence_without_a_lexicon_phrase_is_unaffected(self):
         stream = sse({'translation': '너는 외출 금지야.', 'alternatives': []})
@@ -61,6 +74,21 @@ class PhraseAlternativeTests(unittest.TestCase):
         self.assertTrue(result['valid'])
         self.assertIsNone(result['result']['translation_confidence'])
         self.assertEqual(result['result']['alternatives'], [])
+        ranker.assert_not_called()
+
+    def test_catalog_word_resolution_also_sets_full_confidence(self):
+        # "fixed" is a reviewed context_catalog.py word, not a phrasal_lexicon.py
+        # phrase — dashboard_server.py still passes the resolved meaning as
+        # context_selection, and that alone (not find_phrase) must set confidence.
+        stream = sse({'translation': '그것은 제자리에 고정되어 있나요?', 'alternatives': []})
+        with patch.object(m, 'rank_senses') as ranker, \
+             patch.object(m.urllib.request, 'urlopen', return_value=stream):
+            result = m.translate(
+                "Is it fixed in place?",
+                context_selection='The topic is whether something is physically secured or mounted.',
+            )
+        self.assertTrue(result['valid'])
+        self.assertEqual(result['result']['translation_confidence'], 1.0)
         ranker.assert_not_called()
 
 

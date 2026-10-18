@@ -15,7 +15,7 @@ ROOT=Path(__file__).resolve().parent
 LOCK=threading.RLock()
 RECALL=RecallTracker()
 LIVE_SENTENCES=SentenceLedger();LIVE_CHANGED=threading.Condition(LOCK);LIVE_STREAM_ID=uuid.uuid4().hex;LIVE_REVISION=0
-STATE={'chat_id':uuid.uuid4().hex,'chat_mode':None,'chat_messages':[],'chat_archive':[],'vocabulary':[],'recall':None,'status':'loading','stage':'loading','model_status':'loading','level':None,'event':None,'history':[],'logs':[],'error':None,'session':0,'words':[],'word_source':'','word_context':'','word_index':0,'word_notice':'','answers':[],'selected':0,'hardware':None,'hardware_error':None,'live':None,'snapshot':None,'snapshot_id':None,'context_decision':None,'pending_context':None,'generation':0,'context_mode':'sentences','frozen_sentence_context':'','requested_context_mode':'sentences','source_language':'en','target_language':'ko'}
+STATE={'chat_id':uuid.uuid4().hex,'chat_mode':None,'chat_messages':[],'chat_archive':[],'vocabulary':[],'recall':None,'status':'loading','stage':'loading','model_status':'loading','level':None,'event':None,'history':[],'logs':[],'error':None,'session':0,'words':[],'word_source':'','word_context':'','word_index':0,'word_notice':'','translation_notice':'','saved_translation_revision':0,'auto_saved_snapshot_id':None,'answers':[],'selected':0,'hardware':None,'hardware_error':None,'live':None,'snapshot':None,'snapshot_id':None,'context_decision':None,'pending_context':None,'generation':0,'context_mode':'sentences','frozen_sentence_context':'','requested_context_mode':'sentences','source_language':'en','target_language':'ko'}
 try:
     STATE['chat_archive']=json.loads((ROOT/'chat-history.json').read_text())[-50:]
 except (OSError,ValueError,TypeError):pass
@@ -205,7 +205,16 @@ def translate_snapshot(row,payload,decision,session,generation,selection=None):
     if STATE.get('chat_mode'):context+='\nChat category selected by the user (keep for this chat): '+STATE['chat_mode']
     if selection:context+='\nThe user explicitly selected this context: '+selection
     elif decision.get('topic'):context+='\nSupported topic: '+decision['topic']+'\nEvidence: '+decision.get('evidence','')
-    tick=time.perf_counter();result=api_request('interpret/button',{**payload,'context':context})
+    request_payload={**payload,'context':context}
+    # choose_context() already sets payload['context_selection'] (mapped through
+    # option_contexts) for an explicit user pick — never override that. Only
+    # fill it in here for an auto-resolve /context/resolve already settled
+    # (reviewed rule or vote-share threshold), so translate() reuses that
+    # result instead of independently resampling the same phrase and risking
+    # a different, disagreeing split.
+    if 'context_selection' not in request_payload and not selection and decision.get('topic') and not decision.get('needs_clarification'):
+        request_payload['context_selection']=decision['topic']
+    tick=time.perf_counter();result=api_request('interpret/button',request_payload)
     options=dictionary_options(result,context,STATE['source_language'],STATE['target_language'])
     with LOCK:
         if CLOSING or session!=STATE['session'] or generation!=STATE['generation']:return
@@ -430,13 +439,27 @@ def hardware_sample(value):
         event={'time':time.time(),'delta':changed,'state':value,'stage':STATE['stage']}
         with (ROOT/'hardware-events.jsonl').open('a') as f:f.write(json.dumps(event)+'\n')
         if STATE['model_status']!='ready':return
+        # Workaround for a physical click that is not registering reliably:
+        # every rotation step also confirms, in addition to still moving the
+        # selection exactly as before (above). `changed['clicks']` itself is
+        # left untouched (real click count, as logged in the event above);
+        # only this local trigger value folds rotation in.
+        effective_clicks=changed['clicks']+(abs(changed['rotations']) if not changed['holds'] else 0)
         try:
-            if changed['holds']>0 or changed['clicks']>0:
+            if changed['holds']>0 or effective_clicks>0:
                 pending=STATE.get('pending_context')
                 if changed['holds']>0:new_chat()
-                elif pending and changed['clicks']>0 and not changed['holds']:
+                elif pending and effective_clicks>0 and not changed['holds']:
                     choose_context(STATE['selected'],pending['snapshot_id'])
-                elif changed['clicks']>0 and not changed['holds'] and STATE.get('words'):
+                elif (effective_clicks>0 and not changed['holds'] and STATE['stage']=='ready' and STATE.get('answers')
+                      and STATE.get('auto_saved_snapshot_id')!=STATE.get('snapshot_id')):
+                    # The button's main job: press it to keep the sentence you
+                    # just heard translated. Takes priority over word-saving
+                    # below, which only applies once nothing is left to save.
+                    # Guarded by snapshot_id so repeated clicks on the same
+                    # result do not create duplicate saved entries.
+                    threading.Thread(target=save_translation_safely,daemon=True).start()
+                elif effective_clicks>0 and not changed['holds'] and STATE.get('words'):
                     index=STATE['word_index'];generation=STATE['generation']
                     threading.Thread(target=save_word_safely,args=(index,generation),daemon=True).start()
                 elif STATE['status']=='recording':analyze()
@@ -502,6 +525,16 @@ def save_word_safely(index=None,generation=None):
     except Exception as error:
         with LOCK:STATE['word_notice']=str(error)
 
+def save_translation_safely():
+    # Fire-and-forget from a physical knob click: there is no HTTP caller
+    # waiting on a response, so success/failure is reported through STATE for
+    # the dashboard to pick up on its next poll (same pattern as word_notice).
+    try:
+        saved=save_current_translation()
+        with LOCK:STATE['translation_notice']='Saved sentence #'+str(saved['id'])+' to your saved sentences.'
+    except Exception as error:
+        with LOCK:STATE['translation_notice']=str(error)
+
 def save_current_translation():
     with LOCK:
         if STATE.get('pending_context') or STATE['stage'] in {'thinking', 'transcribing', 'clarifying'}:
@@ -523,7 +556,11 @@ def save_current_translation():
         headers={'Content-Type': 'application/json'}
     )
     with urllib.request.urlopen(request, timeout=10) as response:
-        return json.load(response)
+        saved=json.load(response)
+    with LOCK:
+        STATE['saved_translation_revision']+=1
+        STATE['auto_saved_snapshot_id']=STATE.get('snapshot_id')
+    return saved
 
 class Handler(BaseHTTPRequestHandler):
     def reply(self,status,data,content_type='application/json; charset=utf-8'):

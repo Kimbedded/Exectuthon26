@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id);let busy=false,lastAnswers='',lastContext='',lastContextBadge='',lastWordNotice='',currentChatId=null;const names={translation:'Natural translation',literal:'Literal translation',explanation:'Context explanation'};
+const $=id=>document.getElementById(id);let busy=false,lastAnswers='',lastContext='',lastContextBadge='',lastWordNotice='',lastTranslationNotice='',lastSavedRevision=-1,currentChatId=null;const names={translation:'Natural translation',literal:'Literal translation',explanation:'Context explanation'};
 function showSnackbar(text,failed=false){const bar=$('snackbar');bar.textContent=text;bar.className='snackbar visible'+(failed?' error':'');clearTimeout(window.snackbarTimer);window.snackbarTimer=setTimeout(()=>bar.className='snackbar',3500);}
 window.selectDictionaryWord=index=>action('word-select',{index});
 async function action(path,extra={}){if(busy)return;busy=true;try{const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:$('language').value,target_language:$('target').value,...extra})});const d=await r.json();if(!r.ok)throw Error(d.error||'Could not complete this action.');await refresh()}catch(e){$('error').textContent=e.message;if(path==='word-save')showSnackbar(e.message,true)}finally{busy=false}}
@@ -21,7 +21,7 @@ for(const button of document.querySelectorAll('[data-idk-nav]')){
 $('changeMeaning').onclick=()=>action('context-reopen',{snapshot_id:storageState?.snapshot_id});
 let liveStreamId=null,liveRevision=-1;
 function resetChatUi(){
-  lastAnswers='';lastContext='';lastContextBadge='';lastWordNotice='';
+  lastAnswers='';lastContext='';lastContextBadge='';lastWordNotice='';lastTranslationNotice='';
   liveStreamId=null;liveRevision=-1;window.archiveKey=null;
   for(const id of ['liveTranscript','source','selected','snapshotRange','targetSource','asrQuality','json','wordNotice','contextTopic','contextEvidence','contextPrompt','chatCategory','chatInfo','storageStatus','asr','api','elapsed','selectionLabel']){
     $(id).textContent='';
@@ -77,7 +77,7 @@ $('recallNotice').textContent=showRecall?'Word seen again · '+recall.hits.map(h
 for(const span of $('liveTranscript').querySelectorAll('.transcript-word'))span.classList.toggle('recall-word',Boolean(showRecall&&recall.hits.some(h=>span.textContent.replace(/[^\p{L}\p{N}]/gu,'').toLowerCase()===h.heard.toLowerCase())));
 const archiveKey=JSON.stringify([s.chat_archive?.length,s.chat_id]);if(window.archiveKey!==archiveKey){window.archiveKey=archiveKey;$('chatArchive').replaceChildren();for(const chat of [...(s.chat_archive||[])].reverse()){const item=document.createElement('details');const label=document.createElement('summary');label.textContent=(chat.mode||'Automatic context')+' · '+new Date(chat.ended_at*1000).toLocaleString();item.append(label);for(const message of chat.messages||[]){const text=document.createElement('p');text.textContent=(message.translation?.source||message.transcript)+' → '+(message.translation?.translation||'');item.append(text);}$('chatArchive').append(item);}}
 
-const frozen=s.snapshot;const basis=(s.event?.context_mode||s.requested_context_mode||s.context_mode)==='sentences'?'Up to 5 recent sentences':'Recent 30 seconds';$('snapshotRange').textContent=frozen?`${basis} · audio window ${frozen.window_seconds.toFixed(1)} seconds (${elapsed(frozen.window_start_ms)}–${elapsed(frozen.window_end_ms)})`:'Choose Understand this to keep the current moment.';
+const frozen=s.snapshot;const basis=(s.event?.context_mode||s.requested_context_mode||s.context_mode)==='sentences'?'Up to 3 recent sentences':'Recent 30 seconds';$('snapshotRange').textContent=frozen?`${basis} · audio window ${frozen.window_seconds.toFixed(1)} seconds (${elapsed(frozen.window_start_ms)}–${elapsed(frozen.window_end_ms)})`:'Choose Understand this to keep the current moment.';
 $('targetSource').textContent=s.event?.transcript && s.event?.asr_quality?.status!=='non_speech'?'The green sentence is the current analysis target.':'';
 const badge=TranscriptView.contextBadge(s);const badgeKey=JSON.stringify(badge);if(badgeKey!==lastContextBadge){lastContextBadge=badgeKey;$('contextSummary').className='context-summary '+badge.kind;$('contextCategory').textContent=badge.label;$('contextOrigin').textContent=badge.origin;$('contextOrigin').hidden=!badge.origin;$('contextTopic').textContent=badge.topic;$('contextEvidence').textContent=badge.evidence?'Evidence: '+badge.evidence:'';}
 const pending=s.pending_context;$('contextQuestion').hidden=!pending;
@@ -101,6 +101,8 @@ if(wordKey!==lastAnswers){lastAnswers=wordKey;
 }
 $('wordNotice').textContent=s.word_notice||'';
 if(s.word_notice&&s.word_notice!==lastWordNotice){lastWordNotice=s.word_notice;showSnackbar(s.word_notice,!s.word_notice.endsWith('saved to your wordbook.'));}
+if(s.translation_notice&&s.translation_notice!==lastTranslationNotice){lastTranslationNotice=s.translation_notice;showSnackbar(s.translation_notice,!s.translation_notice.endsWith('to your saved sentences.'));}
+if(s.saved_translation_revision!==lastSavedRevision){lastSavedRevision=s.saved_translation_revision;refreshSavedTranslations().catch(()=>{});}
 window.currentWordState=s;
 $('hardware').textContent=s.hardware?.knob_ok?'Connected · 0x'+s.hardware.address.toString(16):'Not detected';$('logs').textContent=JSON.stringify(s.hardware,null,2)+'\n\n'+s.logs.join('\n');}catch(e){$('badge').textContent='Connection interrupted';$('badge').className='badge';$('listener').textContent='Reconnecting';for(const id of ['analyze','speak','saveTranslation','changeMeaning'])$(id).disabled=true;}finally{refreshing=false}}
 
@@ -137,16 +139,11 @@ async function storageRequest(path, options = {}) {
   return data;
 }
 
-async function loadSavedTranslations() {
-  const entries = await storageRequest('translations');
-  if (!Array.isArray(entries)) throw Error('Invalid saved translation list.');
-  const list = $('savedTranslations');
-  list.replaceChildren();
+function renderSavedTranslations(container, entries, emptyText) {
+  container.replaceChildren();
   const note = document.createElement('p');
-  note.textContent = entries.length
-    ? 'Most recent saved translations (up to 50).'
-    : 'No saved translations yet.';
-  list.append(note);
+  note.textContent = entries.length ? emptyText.full : emptyText.empty;
+  container.append(note);
   for (const entry of entries) {
     const card = document.createElement('article');
     card.className = 'answer';
@@ -166,12 +163,29 @@ async function loadSavedTranslations() {
       line.textContent = alternative.context + ': ' + alternative.translation;
       card.append(line);
     }
-    list.append(card);
+    container.append(card);
   }
-  list.hidden = false;
-  $('savedCount').textContent=entries.length===50?'50+':String(entries.length);
+  container.hidden = false;
+}
+
+// Shared fetch for both the always-visible "Saved sentences" strip at the
+// bottom of the conversation page and the full list on the Wordbook tab, so
+// pressing the physical knob (which has no browser-side response to react to)
+// and the on-screen Save button both keep every view in sync via one fetch.
+async function refreshSavedTranslations() {
+  const entries = await storageRequest('translations');
+  if (!Array.isArray(entries)) throw Error('Invalid saved translation list.');
+  renderSavedTranslations($('recentSavedTranslations'), entries.slice(0, 5),
+    {full: 'Last ' + Math.min(entries.length, 5) + ' saved · press the knob or Save translation to add more.',
+     empty: 'Nothing saved yet. Press the knob, or Save translation, to keep a result here.'});
+  if (!$('savedTranslations').hidden) {
+    renderSavedTranslations($('savedTranslations'), entries,
+      {full: 'Most recent saved translations (up to 50).', empty: 'No saved translations yet.'});
+  }
+  $('savedCount').textContent = entries.length === 50 ? '50+' : String(entries.length);
   return entries.length;
 }
+async function loadSavedTranslations() { return refreshSavedTranslations(); }
 
 $('saveTranslation').onclick = async () => {
   if (storageBusy || $('saveTranslation').disabled) return;
@@ -185,10 +199,8 @@ $('saveTranslation').onclick = async () => {
       body: '{}'
     });
     let message = 'Saved translation #' + saved.id + '.';
-    if (!$('savedTranslations').hidden) {
-      try { await loadSavedTranslations(); }
-      catch (error) { message += ' Review could not refresh. Click Review saved to retry.'; }
-    }
+    try { await refreshSavedTranslations(); }
+    catch (error) { message += ' The saved list could not refresh.'; }
     storageMessage(message);
   } catch (error) {
     $('reviewStatus').textContent=error.message;

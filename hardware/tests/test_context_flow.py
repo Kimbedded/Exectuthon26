@@ -63,6 +63,20 @@ class ContextFlowTests(unittest.TestCase):
    self.assertNotIn('construction',call.args[1]['context'])
   self.assertNotIn('Professional',api.call_args_list[0].args[1]['context'])
   self.assertIn('Professional',api.call_args_list[1].args[1]['context'])
+ def test_vote_auto_resolved_decision_reuses_topic_as_context_selection(self):
+  row={'transcript':'Dinner tonight, can you make it?','status':'transcribed','elapsed_ms':30000}
+  decision={'needs_clarification':False,'source':row['transcript'],
+      'topic':'Interpret "make it" as: prepare or cook it','evidence':'',
+      'decision_method':'reviewed_phrase_senses_vote_resolved',
+      'likelihood':{'method':'model_vote_share','shares':[.1,.9],'valid_samples':4}}
+  result={'source':row['transcript'],'translation':'저녁을 만들 수 있어요?',
+      'translation_confidence':0.9,'answers':[{'kind':'translation','text':'저녁을 만들 수 있어요?'}]}
+  with patch.object(d,'dictionary_options',return_value=[]),patch.object(d,'schedule_word'), \
+       patch.object(d,'api_request',side_effect=[decision,result]) as api:
+   with d.LOCK:d.process_snapshot(row)
+  interpret=[call for call in api.call_args_list if call.args[0]=='interpret/button'][0]
+  self.assertEqual(interpret.args[1]['context_selection'],'Interpret "make it" as: prepare or cook it')
+  self.assertEqual(d.STATE['stage'],'ready')
  def test_choice_is_forwarded_and_resolved_led_state_is_cleared(self):
   decision={'needs_clarification':True,'source':'Can you make it?','question':'Attend or cook?',
       'options':['Attend','Cook'],'option_contexts':['come / be able to attend','prepare or cook it'],

@@ -18,7 +18,13 @@ from model_transport import open_model_request
 # would create an import cycle, since translate_sentence imports this module.
 MODEL = 'unsloth/Qwen3.5-2B-GGUF:Q4_0'
 LETTERS = 'ABCD'
-DEFAULT_SAMPLES = 8
+# The board's single NPU model is shared with the continuous live ASR process
+# (polling roughly every second). Each sample is a real round trip to that
+# same model, so this stays small: samples=4 means 8 total calls (forward +
+# reverse) per phrase instead of 16. Lower resolution but far less contention
+# with live transcription — observed live as repeated "VLM prefix reuse
+# failed" resets and request timeouts when this was 8.
+DEFAULT_SAMPLES = 4
 DEFAULT_THRESHOLD = 0.85
 
 
