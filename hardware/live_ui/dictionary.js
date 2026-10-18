@@ -4,6 +4,7 @@
   const byId = id => document.getElementById(id);
   const labels = {exact: 'Dictionary word', base_form: 'Word form', prefix: 'Starts with', similar: 'Possible spelling', contains: 'Contains'};
   let lastKey = '', generation = 0, currentPayload = null, currentTerms = [], selectedTerm = 0;
+  let selectedWordIndex = -1;
 
   function message(text, failed = false) {
     byId('dictionaryStatus').textContent = text;
@@ -164,6 +165,9 @@
       button.onclick = () => {
         generation += 1;
         markWord(button);
+        const selected = (window.currentWordState?.words || []).findIndex(item =>
+          item.word.toLowerCase() === match.term.toLowerCase());
+        if (selected >= 0) window.selectDictionaryWord?.(selected);
         showRelatedWords(match);
         renderMeanings(match);
       };
@@ -194,10 +198,17 @@
         button.type = 'button';
         button.className = 'dictionary-match';
         button.textContent = term.observed;
-        button.onclick = () => showTerm(index);
+        button.onclick = () => {
+          const selected = (window.currentWordState?.words || []).findIndex(item =>
+            item.word.toLowerCase() === term.observed.toLowerCase());
+          if (selected >= 0) window.selectDictionaryWord?.(selected);
+          showTerm(index);
+        };
         byId('dictionaryTerms').append(button);
       }
       showTerm(0);
+      window.updateDictionarySelection?.(window.currentWordState?.word_index ?? -1,
+        window.currentWordState?.words || []);
       message('Words found in the English ' + (data.basis === 'source' ? 'source' : 'translation')
         + '. Compare meanings and related words; suggestions do not replace the translation.');
     } catch (error) {
@@ -232,6 +243,16 @@
       source_language: result.source_language || state.source_language || 'en',
       target_language: result.target_language || state.target_language || 'ko',
       context: (event.transcript || '').slice(-6000)
+    };
+
+    window.updateDictionarySelection = (index, words) => {
+      selectedWordIndex = index;
+      for (const button of document.querySelectorAll('#dictionaryTerms button, #dictionaryMatches button')) {
+        const term = button.querySelector('span')?.textContent || button.textContent.split('\n')[0];
+        const match = (words || []).findIndex(item => item.word.toLowerCase() === term.toLowerCase());
+        button.classList.toggle('chosen', match === index);
+        button.setAttribute('aria-pressed', String(match === index));
+      }
     };
     const key = JSON.stringify(payload);
     if (key === lastKey) return;
