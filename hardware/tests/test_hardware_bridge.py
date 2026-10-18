@@ -10,4 +10,21 @@ class HardwareBridgeTests(unittest.TestCase):
         with patch('hardware_bridge.subprocess.run',return_value=result) as run:
             self.assertEqual(h.rpc('idk.set',0,-1,0),{'ok':True})
         self.assertEqual(run.call_args.args[0][-1],'arduino-router-cli -- idk.set 0 -1 0')
+
+    def test_green_led_uses_independent_rpc(self):
+        h=HardwareBridge('3220953353',lambda _:None,lambda _:None)
+        result=subprocess.CompletedProcess([],0,stdout='Got RPC response: "{\\"ok\\":true}"\n',stderr='')
+        with patch('hardware_bridge.subprocess.run',return_value=result) as run:
+            h.set_green_led(True)
+            self.assertTrue(h.green_led)
+            self.assertEqual(h.rpc('idk.green',1),{'ok':True})
+        self.assertEqual(run.call_args.args[0][-1],'arduino-router-cli -- idk.green 1')
+
+    def test_close_clears_both_leds_and_display(self):
+        h=HardwareBridge('3220953353',lambda _:None,lambda _:None)
+        h.thread=unittest.mock.Mock()
+        calls=[]
+        h.rpc=lambda method,*args:calls.append((method,args))
+        h.close()
+        self.assertEqual(calls,[('idk.led',(0,)),('idk.green',(0,)),('idk.set',(0,0,0))])
 if __name__=='__main__':unittest.main()

@@ -27,7 +27,21 @@ def display(selection=None):
     # counters and the screen highlight, so never send an out-of-range word index.
     if HARDWARE:
         HARDWARE.set_red_led(intention_mismatch())
+        HARDWARE.set_green_led(translation_is_certain())
         HARDWARE.display(STAGES.get(STATE['stage'],0),-1 if selection is None else selection,len((STATE.get('pending_context') or {}).get('options',[])) or 0)
+
+def translation_is_certain():
+    """Return true only for a complete, calibrated, unambiguous button result."""
+    if STATE.get('stage') != 'ready':
+        return False
+    translation=((STATE.get('event') or {}).get('translation') or {})
+    confidence=translation.get('translation_confidence')
+    if not isinstance(confidence,(int,float)) or isinstance(confidence,bool) or confidence < 0.8:
+        return False
+    if translation.get('alternatives'):
+        return False
+    answers=STATE.get('answers') or []
+    return len(answers)==3 and all(isinstance(answer,dict) and isinstance(answer.get('text'),str) and answer['text'].strip() for answer in answers)
 
 def intention_mismatch():
     """Return whether the current user-visible result has unresolved intent."""
@@ -285,6 +299,7 @@ def reset_chat_state():
     if HARDWARE:
         HARDWARE.clear_recall()
         HARDWARE.set_red_led(False)
+        HARDWARE.set_green_led(False)
     if SPEECH is not None and SPEECH.poll() is None:
         SPEECH.terminate()
 
@@ -373,7 +388,9 @@ def speak():
 def hardware_error(message):
     with LOCK:
         STATE['hardware_error']=message
-        if HARDWARE:HARDWARE.set_red_led(False)
+        if HARDWARE:
+            HARDWARE.set_red_led(False)
+            HARDWARE.set_green_led(False)
 
 def hardware_sample(value):
     with LOCK:
@@ -594,4 +611,4 @@ if __name__=='__main__':
         if PROCESS is not None:
             try:PROCESS.wait(timeout=195)
             except subprocess.TimeoutExpired:PROCESS.terminate()
-        HARDWARE.set_red_led(False);HARDWARE.close();server.server_close()
+        HARDWARE.set_red_led(False);HARDWARE.set_green_led(False);HARDWARE.close();server.server_close()

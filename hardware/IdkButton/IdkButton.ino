@@ -4,6 +4,7 @@
 
 Arduino_LED_Matrix matrix;
 const int RED_LED_PIN=D8;
+const int GREEN_LED_PIN=D7;
 // 0 idle, 1 recording, 2 ASR, 3 LLM, 4 ready, 5 speaking, 6 error
 int uiState=0, selected=0, answerCount=0, address=0;
 arduino::ZephyrI2C* bus=&Wire1;
@@ -13,6 +14,7 @@ int32_t rotations=0;
 uint32_t clicks=0, holds=0, frames=0, readErrors=0;
 bool knobOk=false, pressed=false, initialized=false, rawPressed=false, held=false;
 bool redLed=false;
+bool greenLed=false;
 unsigned long changedAt=0, downAt=0, lastScan=0;
 uint32_t frameHash=0; int litPixels=0;
 
@@ -47,6 +49,7 @@ String readState(){
   ",\"rotations\":"+rotations+",\"clicks\":"+clicks+",\"holds\":"+holds+
   ",\"state\":"+uiState+",\"selected\":"+selected+",\"answer_count\":"+answerCount+
   ",\"red_led\":"+(redLed?"true":"false")+
+  ",\"green_led\":"+(greenLed?"true":"false")+
   ",\"frames\":"+frames+",\"lit_pixels\":"+litPixels+",\"frame_hash\":"+frameHash+",\"read_errors\":"+readErrors+"}";
 }
 String setState(int state,int selection,int count){
@@ -58,6 +61,10 @@ String setState(int state,int selection,int count){
 String setRedLed(int enabled){
  redLed=enabled!=0;digitalWrite(RED_LED_PIN,redLed?HIGH:LOW);
  return String("{\"ok\":true,\"red_led\":")+(redLed?"true}":"false}");
+}
+String setGreenLed(int enabled){
+ greenLed=enabled!=0;digitalWrite(GREEN_LED_PIN,greenLed?HIGH:LOW);
+ return String("{\"ok\":true,\"green_led\":")+(greenLed?"true}":"false}");
 }
 void render(){
  uint8_t pixels[104]={};unsigned long t=millis();
@@ -83,11 +90,13 @@ void render(){
 }
 void setup(){
  pinMode(RED_LED_PIN,OUTPUT);digitalWrite(RED_LED_PIN,LOW);
+ pinMode(GREEN_LED_PIN,OUTPUT);digitalWrite(GREEN_LED_PIN,LOW);
  matrix.begin();matrix.setGrayscaleBits(3);Wire1.begin();Wire2.begin();Wire.begin();Wire1.setClock(100000);Wire2.setClock(100000);Wire.setClock(100000);scanKnob();
  delay(2000);Bridge.begin();
  while(!Bridge.provide("idk.read",readState))delay(100);
  while(!Bridge.provide("idk.set",setState))delay(100);
  while(!Bridge.provide("idk.led",setRedLed))delay(100);
+ while(!Bridge.provide("idk.green",setGreenLed))delay(100);
  Bridge.provide("knob.read",readState);
 }
 void loop(){pollKnob();render();delay(10);}

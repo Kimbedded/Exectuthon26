@@ -9,8 +9,9 @@ Device: VENTUNO Q, ADB serial `3220953353`. Knob: Qwiic/MCU I2C, address `0x3A` 
 | Signal | Board pin | Electrical behavior | Role and use |
 |---|---|---|---|
 | Red intention LED | D8 | Active-high: `HIGH` = on, `LOW` = off; connect the LED anode to D8 through a current-limiting resistor (330–1,000 Ω) and the cathode to GND | The dashboard turns it on only when the current result has unresolved intent: a context clarification is pending or the translation contains a genuine alternative meaning. It is off for chat-category setup, a resolved match, recording/processing, errors, reset, and new chat. The firmware initializes D8 LOW and the host explicitly clears it during shutdown. |
+| Green completion LED | D7 | Active-high: `HIGH` = on, `LOW` = off; connect the LED anode to D7 through a 330–1,000 Ω series resistor and the cathode to GND | The dashboard turns it on only when a completed translation is certain: the model supplies calibrated `translation_confidence >= 0.80`, no translation alternatives remain, and all three button answers are present. It is off during recording, ASR/LLM processing, errors, context clarification, uncertain alternatives, reset, and new chat. The firmware initializes D7 LOW and the host explicitly clears it during shutdown. |
 
-The LED is driven by the `idk.led` hardware-bridge RPC and is independent of the built-in matrix. Do not connect an LED directly without the series resistor. The documented active-high wiring must match the firmware and host mock tests.
+The LEDs are driven independently by the `idk.led` (D8 red) and `idk.green` (D7 green) hardware-bridge RPCs and are independent of the built-in matrix and each other. Do not connect an LED directly without the series resistor. The documented active-high wiring must match the firmware and host mock tests. Both cathodes connect to GND.
 
 ## Use
 
@@ -62,6 +63,8 @@ Firmware RPC:
 - `idk.read`: JSON string with firmware version, knob health, position, cumulative rotations/clicks/holds, selected zero-based index, state, frame counter and frame hash.
 - `idk.set <state> <selected> <count>`: sets display; selected `-1` preserves the physical selection. Returns a JSON **string**, avoiding an installed router CLI integer-result printing bug.
 - `idk.led <0|1>`: sets the external D8 red intention LED; `1` is on and `0` is off. Returns a JSON string.
+- `idk.green <0|1>`: sets the external D7 green completion LED; `1` is on and `0` is off. Returns a JSON string.
+- `idk.read`: includes independent `red_led` and `green_led` booleans.
 
 Counter checks prove sensor input and rendered-frame changes. They do not replace human visual confirmation of LEDs or audible confirmation of TTS.
 

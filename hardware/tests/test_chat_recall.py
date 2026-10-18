@@ -30,7 +30,7 @@ class RecallTests(unittest.TestCase):
    else:bridge.closed.set()
   def rpc(method,*args):
    if method=='idk.set':sent.append(args);return {}
-   if method=='idk.led':return {}
+   if method in {'idk.led','idk.green'}:return {}
    return {'firmware':'idk-button-1','state':sent[-1][0],'answer_count':sent[-1][2]}
   bridge.on_sample=sample;bridge.rpc=rpc
   with patch('hardware_bridge.time.monotonic',side_effect=lambda:clock[0]):
@@ -49,14 +49,32 @@ class ChatTests(unittest.TestCase):
   d.STATE.update(stage='ready',pending_context=None,context_decision={'needs_clarification':False},event={'translation':{'alternatives':[]}})
   d.display()
   hardware.set_red_led.assert_called_with(False)
+  hardware.set_green_led.assert_called_with(False)
+  d.STATE.update(stage='ready',answers=[{'kind':k,'text':'answer'} for k in ['translation','literal','explanation']],
+                 event={'translation':{'translation_confidence':0.95,'alternatives':[]}})
+  d.display()
+  hardware.set_green_led.assert_called_with(True)
+  d.STATE['event']['translation']['alternatives']=[{'context':'other','translation':'other'}]
+  d.display()
+  hardware.set_green_led.assert_called_with(False)
+  d.STATE['event']['translation']['alternatives']=[]
+  d.STATE['event']['translation']['translation_confidence']=0.79
+  d.display()
+  hardware.set_green_led.assert_called_with(False)
+  d.STATE['stage']='thinking'
+  d.STATE['event']['translation']['translation_confidence']=0.95
+  d.display()
+  hardware.set_green_led.assert_called_with(False)
  def test_error_and_reset_clear_the_red_led(self):
   hardware=Mock();d.HARDWARE=hardware
   d.STATE.update(stage='ready',event={'translation':{'alternatives':[{'context':'other'}]}},pending_context=None)
   d.stage('error')
   hardware.set_red_led.assert_called_with(False)
+  hardware.set_green_led.assert_called_with(False)
   hardware.reset_mock()
   d.reset_chat_state()
   hardware.set_red_led.assert_called_with(False)
+  hardware.set_green_led.assert_called_with(False)
  def test_hold_creates_unset_chat_and_empty_pcm_session_while_preserving_archive(self):
   with patch.object(d,'send') as send:d.new_chat()
   self.assertEqual([x.args[0]['action'] for x in send.call_args_list],['stop','start'])
