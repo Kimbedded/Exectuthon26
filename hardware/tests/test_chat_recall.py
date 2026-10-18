@@ -90,10 +90,13 @@ class ChatTests(unittest.TestCase):
   with patch.object(d,'new_chat') as new,patch.object(d,'analyze') as analyze:
    d.hardware_sample({'rotations':0,'clicks':0,'holds':1})
   new.assert_called_once();analyze.assert_not_called()
- def test_unset_chat_asks_category_before_any_model_call(self):
+ def test_unset_chat_analyzes_actual_meaning_without_a_category_gate(self):
   d.STATE['chat_mode']=None
-  with patch.object(d,'api_request') as api:d.process_snapshot({'transcript':'I go nuts.'})
-  api.assert_not_called();self.assertEqual(d.STATE['pending_context']['kind'],'chat_mode')
+  decision={'needs_clarification':True,'options':['Attend','Cook'],'question':'Which meaning?'}
+  with patch.object(d.threading,'Thread') as thread:
+   d.process_snapshot({'transcript':'Can you make it?'})
+  thread.return_value.start.assert_called_once()
+  self.assertIsNone(d.STATE['pending_context'])
  def test_category_choice_is_kept_for_following_sentences(self):
   d.STATE.update(chat_mode=None,pending_context={'kind':'chat_mode','snapshot_id':'test'},snapshot_id='test',event={'transcript':'hello'})
   with patch.object(d,'process_snapshot') as process:d.choose_context(0,'test')

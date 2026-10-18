@@ -63,4 +63,24 @@ class ContextFlowTests(unittest.TestCase):
    self.assertNotIn('construction',call.args[1]['context'])
   self.assertNotIn('Professional',api.call_args_list[0].args[1]['context'])
   self.assertIn('Professional',api.call_args_list[1].args[1]['context'])
+ def test_choice_is_forwarded_and_resolved_led_state_is_cleared(self):
+  decision={'needs_clarification':True,'source':'Can you make it?','question':'Attend or cook?',
+      'options':['Attend','Cook'],'option_contexts':['come / be able to attend','prepare or cook it'],
+      'likelihood':{'method':'model_vote_share','shares':[.75,.25],'valid_samples':4}}
+  row={'transcript':'Can you make it?'}
+  result={'source':row['transcript'],'translation':'만들 수 있어요?','answers':[{'kind':'translation','text':'만들 수 있어요?'}]}
+  with patch.object(d,'dictionary_options',return_value=[]),patch.object(d,'schedule_word'),patch.object(d,'api_request',side_effect=[decision,result]) as api:
+   with d.LOCK:d.process_snapshot(row)
+   d.choose_context(1,'1:1')
+  interpret=[call for call in api.call_args_list if call.args[0]=='interpret/button'][0]
+  self.assertEqual(interpret.args[1]['context_selection'],'prepare or cook it')
+  self.assertFalse(d.STATE['context_decision']['needs_clarification'])
+  self.assertFalse(d.intention_mismatch())
+  self.assertEqual(d.STATE['event']['clarification_options']['options'],['Attend','Cook'])
+  with self.assertRaises(ValueError):d.reopen_context('old-snapshot')
+  d.reopen_context('1:1')
+  self.assertEqual(d.STATE['stage'],'clarifying')
+  self.assertNotIn('translation',d.STATE['event'])
+  self.assertFalse(d.STATE['answers'])
+  with self.assertRaises(ValueError):d.save_current_translation()
 if __name__=='__main__':unittest.main()

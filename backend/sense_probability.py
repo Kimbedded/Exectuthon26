@@ -1,10 +1,11 @@
-"""Self-consistency sense-probability estimation for ambiguous phrases.
+"""Sampled model preference among supplied meanings; NOT calibrated accuracy.
 
 A 2B on-device model cannot reliably self-report a confidence percentage: asked
 directly, it either commits to one sense or invents an unfounded number. Instead
 we resample the model's own single-letter choice at temperature=1.0 and use the
-response frequency as the probability, averaging forward and reversed option
-order to cancel the model's tendency to prefer whichever option comes first.
+response frequency as a model vote share, testing both option orders to reduce
+order bias. Agreement can still be confidently wrong. This is not a measured
+probability that a meaning or a translation is correct.
 """
 import json
 import os
@@ -47,23 +48,29 @@ def _choice_probs(context, target, phrase, senses, *, samples, endpoint):
     counts = Counter()
     for _ in range(samples):
         token = _ask_once(prompt, endpoint)
-        if token and token[0] in letters:
-            counts[token[0]] += 1
-    total = sum(counts.values())
-    if not total:
-        return [1 / len(senses)] * len(senses)
-    return [counts.get(letter, 0) / total for letter in letters]
+        if token in letters and len(token) == 1:
+            counts[token] += 1
+    return [counts.get(letter, 0) for letter in letters]
 
 
 def rank_senses(context, target, phrase, senses, *, samples=DEFAULT_SAMPLES, threshold=DEFAULT_THRESHOLD, endpoint=None):
-    """Rank candidate senses of an ambiguous phrase by sampled model preference.
+    """Rank candidate senses by sampled model preference, not measured truth.
 
     Returns {'ranked': [(sense, probability), ...] sorted descending,
-             'auto_resolved': top probability >= threshold}.
+             'auto_resolved': sufficient samples and top vote share >= threshold}.
+    The legacy auto_resolved flag must not suppress a speaker clarification.
     """
     endpoint = endpoint or os.environ.get('IDK_MODEL_ENDPOINT', 'http://127.0.0.1:18181/v1')
+    if not 2 <= len(senses) <= len(LETTERS) or type(samples) is not int or not 1 <= samples <= 32:
+        raise ValueError('Expected 2–4 senses and 1–32 samples per order')
     forward = _choice_probs(context, target, phrase, senses, samples=samples, endpoint=endpoint)
     reversed_probs = _choice_probs(context, target, phrase, senses[::-1], samples=samples, endpoint=endpoint)[::-1]
-    probabilities = [(f + r) / 2 for f, r in zip(forward, reversed_probs)]
+    votes = [f + r for f, r in zip(forward, reversed_probs)]
+    valid = sum(votes)
+    # Preserve the legacy ranking shape, but mark a no-vote result unavailable;
+    # callers must never display this uniform placeholder as measured 50/50.
+    probabilities = [count / valid if valid else 1 / len(senses) for count in votes]
     ranked = sorted(zip(senses, probabilities), key=lambda pair: -pair[1])
-    return {'ranked': ranked, 'auto_resolved': ranked[0][1] >= threshold}
+    return {'ranked': ranked, 'auto_resolved': bool(valid >= samples and ranked[0][1] >= threshold),
+            'votes': votes, 'valid_samples': valid, 'requested_samples': samples * 2,
+            'method': 'model_vote_share', 'calibrated': False}

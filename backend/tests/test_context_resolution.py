@@ -42,11 +42,11 @@ class ContextResponseTests(unittest.TestCase):
    decision=resolve_context('There is too much play.',context='We are adjusting a machine.')
   self.assertTrue(decision['needs_clarification'])
   self.assertEqual(decision['decision_method'],'broad_context_fallback')
- def test_known_ambiguous_phrase_defers_to_translation_instead_of_broad_fallback(self):
-  with patch('context_resolution.urllib.request.urlopen',return_value=self.response({'topic':'','evidence':'','options':[]})):
+ def test_known_ambiguous_phrase_asks_before_translation(self):
+  with patch('context_resolution.rank_senses',side_effect=ValueError('No usable votes')):
    decision=resolve_context("I'm cooking dinner, can you make it tonight?")
-  self.assertFalse(decision['needs_clarification'])
-  self.assertEqual(decision['decision_method'],'phrasal_lexicon_deferred')
+  self.assertTrue(decision['needs_clarification'])
+  self.assertEqual(decision['decision_method'],'reviewed_phrase_senses')
  def test_unresolvable_context_without_a_lexicon_phrase_still_falls_back(self):
   with patch('context_resolution.urllib.request.urlopen',return_value=self.response({'topic':'','evidence':'','options':[]})):
    decision=resolve_context('This is a vague sentence with no known phrase.')

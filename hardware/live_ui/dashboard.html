@@ -1,253 +1,31 @@
 <!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IDK Button · Live</title>
-<style>
-:root{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;color:#e7edf7;background:#0b121b}*{box-sizing:border-box}body{max-width:1160px;margin:auto;padding:32px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.eyebrow{font-size:12px;color:#73e4b8;letter-spacing:2px}h1{font-size:30px;margin:9px 0}p{line-height:1.65;color:#95a8bd}button,select{font:inherit;border:1px solid #34465c;border-radius:9px;padding:10px 14px;color:inherit;background:#1a293b}button{cursor:pointer}button.primary{background:#73e4b8;color:#10241c;border:0;font-weight:700}button:disabled{opacity:.4;cursor:default}.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:16px;background:#132031;border-radius:14px}.badge{border:1px solid #34465c;border-radius:25px;padding:8px 14px;font-size:13px}.active{color:#73e4b8}.layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}.card{padding:24px;background:#132031;border:1px solid #25374c;border-radius:16px}.label{font-size:12px;color:#8ca2ba;letter-spacing:1px;margin-bottom:14px}.source{font-size:20px;white-space:pre-wrap;word-break:break-word}.selected{font-size:26px;color:#91edcb;white-space:pre-wrap;word-break:break-word}.answer{display:block;width:100%;text-align:left;padding:16px;margin:10px 0;background:#101b29;border:1px solid #314259;border-radius:12px}.answer.chosen{border-color:#73e4b8;background:#15322d}.answer strong{display:block;font-size:12px;color:#85a0bb;margin-bottom:8px}.answer span{font-size:18px;line-height:1.6}.metrics{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:#90a4ba;margin:22px 0}.metrics b{display:block;color:#e7edf7;font-size:18px;margin-top:7px}.error{color:#ffb49b;white-space:pre-wrap}.meter{height:6px;background:#293b50;flex:1;min-width:80px;max-width:140px;border-radius:6px;overflow:hidden}.fill{height:100%;width:0;background:#73e4b8}details{margin:20px 0;color:#91a7bf;font-size:13px}pre{padding:16px;background:#070e16;border-radius:10px;white-space:pre-wrap;overflow:auto;max-height:300px}footer{font-size:13px;color:#7f96ad;line-height:1.8}@media(max-width:760px){body{padding:18px}.layout{grid-template-columns:1fr}h1{font-size:25px}.bar{gap:8px}}
-.word-transcript{line-height:1.95;white-space:pre-wrap;overflow-wrap:anywhere;max-height:310px;overflow:auto;padding:6px 4px;scrollbar-color:#34465c transparent}.transcript-word{display:inline}.sentence-highlight{border-radius:5px;padding:.16em .08em;box-decoration-break:clone;-webkit-box-decoration-break:clone}.live-sentence{background:rgba(93,166,255,.2);color:#d9eaff;box-shadow:inset 0 -2px #69aaff}.frozen-sentence{background:rgba(115,228,184,.24);color:#d8fff0;box-shadow:inset 0 -2px #73e4b8}.transcript-legend{font-size:13px;display:flex;gap:14px;flex-wrap:wrap;margin:12px 0;color:#a6bacf}.legend-live{color:#8abbff}.legend-frozen{color:#91edcb}.stream-status{font-size:12px;color:#a6bacf;margin-top:12px}.asr-details{margin-top:16px}.asr-details>summary{cursor:pointer;color:#8ca2ba;font-size:13px}.source.word-transcript{font-size:21px}
-.context-summary{margin-top:18px;border-left:6px solid #e4b55f;padding:20px 24px}.context-summary.technical{border-left-color:#73e4b8;background:#132c29}.context-summary.casual{border-left-color:#78adff;background:#16263d}.context-summary.unknown{border-left-color:#e4b55f}.context-summary h2{font-size:25px;margin:8px 0 12px}.context-origin{font-size:12px;border:1px solid currentColor;border-radius:18px;padding:5px 10px;color:#a6bacf;display:inline-block}.context-summary p{margin:10px 0 0;overflow-wrap:anywhere}.context-summary.technical h2{color:#91edcb}.context-summary.casual h2{color:#a4c7ff}.context-summary.unknown h2{color:#f0ce91}
-.word-token{display:inline;padding:3px 5px;margin:2px 0;border:1px solid transparent;background:transparent;color:inherit;border-radius:6px;font-size:21px}.word-token.current-word{background:#f0cd77;color:#15202e;border-color:#ffe2a1}.word-meaning{font-size:25px;line-height:1.6;margin:20px 0;color:#f0cd77;min-height:80px}.recall-notice{padding:16px;background:#3b3020;border:1px solid #f0cd77;border-radius:10px;color:#ffe2a1;line-height:1.8}.recall-word{background:#f0cd77;color:#15202e;border-radius:4px;animation:recall-pulse .6s ease-in-out 5}.snackbar{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#73e4b8;color:#10241c;padding:12px 18px;border-radius:10px;font-weight:700;transition:opacity .2s,transform .2s;z-index:10}.snackbar.visible{opacity:1;transform:translate(-50%,0)}.snackbar.error{background:#ffb49b;color:#321812}@keyframes recall-pulse{50%{background:#fff3c7;box-shadow:0 0 12px #f0cd77}}@media(prefers-reduced-motion:reduce){.recall-word{animation:none}}</style>
-<link rel="stylesheet" href="/dictionary.css">
-<script src="/dictionary.js" defer></script>
-<header><div><div class="eyebrow">IDK BUTTON / VENTUNO Q</div><h1>Listen, rotate, understand</h1><p>Sentence transcript · context-aware translation · ASR + Qwen</p></div><span class="badge" id="badge">Model starting</span></header>
-<div class="bar"><select id="language" aria-label="Input language"><option value="en">English input</option><option value="ko">Korean input</option></select><select id="target" aria-label="Translation language"><option value="ko">Korean translation</option><option value="en">English translation</option></select><select id="contextMode" aria-label="Context window"><option value="sentences">Recent 5 sentences</option><option value="time">Recent 30 seconds</option></select><button id="start">Resume listening</button><button class="primary" id="analyze">Analyze current context</button><button id="newChat">New chat · hold knob</button><button id="stop">Pause listening</button><span id="listener" role="status">Preparing microphone</span><div class="meter"><div class="fill" id="fill"></div></div><span id="level">— dBFS</span></div>
-<section class="card" style="margin-top:18px"><div class="label">LIVE · LISTENING</div><div id="liveTranscript" class="source word-transcript" aria-label="Live word-by-word transcript">Waiting for speech.</div><div class="transcript-legend"><span class="legend-live">■ Current input sentence</span><span class="legend-frozen">■ Frozen analysis target</span></div><div id="liveProgress" class="stream-status" role="status">Preparing live recognition</div><p>Committed sentences stay visible while only the latest sentence changes. Choose the context window above.</p></section>
-<section class="card" style="margin-top:18px"><div class="label">CHAT · CURRENT CHAT</div><h2 id="chatCategory">No context set</h2><p id="chatInfo">Choose Casual or Professional on the first analysis.</p><div id="recallNotice" class="recall-notice" role="status" hidden></div><details><summary>Previous chats</summary><div id="chatArchive"></div></details></section><section id="contextSummary" class="card context-summary unknown" aria-label="Current analysis context" role="status"><div class="label">CONTEXT · CURRENT ANALYSIS CONTEXT</div><h2 id="contextCategory">No context selected</h2><span id="contextOrigin" class="context-origin" hidden></span><p id="contextTopic"></p><p id="contextEvidence"></p></section>
-<p id="error" class="error" role="alert"></p>
-<div class="layout"><section class="card"><div class="label">SNAPSHOT · FROZEN AT BUTTON PRESS</div><div id="source" class="source word-transcript" aria-label="Frozen context with the selected sentence highlighted">Speak after listening starts.</div><p id="snapshotRange"></p><p id="targetSource"></p><p id="asrQuality"></p><hr style="border:0;border-top:1px solid #293b50;margin:24px 0"><div class="label">TRANSLATION · SENTENCE TRANSLATION</div><div id="selected" class="selected">Waiting for a result.</div><p id="selectionLabel">The selected answer number appears on the board.</p><button id="speak">Play selected answer</button></section><section class="card"><div id="contextQuestion" hidden><div class="label">CONTEXT CHECK</div><h2 id="contextPrompt"></h2><p>Choose the closer context. Casual or Professional stays active for this chat.</p><div id="contextOptions"></div><button id="contextRetry">Neither · analyze with a new context</button></div><div class="label">TRANSLATION ANSWERS · CHOOSE AN ANSWER</div><div id="answers"></div><p id="wordNotice" role="status"></p><p>Rotate the knob to select an answer or word. Press it to save the selected similar or possible word.<br>Hold the knob to start a new chat.<br>Use “Play selected answer” to hear the selected translation.</p></section></div>
-<section class="card" id="dictionaryPanel" aria-labelledby="dictionaryTitle">
-  <div class="dictionary-word-region" id="dictionaryWordRegion">
-    <div class="label">WORD OPTIONS</div>
-    <h2 id="dictionaryTitle">Similar &amp; possible words</h2>
-    <p class="dictionary-intro">Select a word to see its meanings below.</p>
-    <p id="dictionaryResult" class="dictionary-result" hidden></p>
-    <p id="dictionaryStatus" role="status" aria-live="polite">Words will appear automatically after a translation.</p>
-    <div class="dictionary-word-options">
-      <div class="dictionary-group-label">Words from this result</div>
-      <div id="dictionaryTerms" class="dictionary-matches" role="group" aria-label="Words from this result"></div>
-      <div id="dictionaryMatchesLabel" class="dictionary-group-label" hidden>Possible spellings &amp; word forms</div>
-      <div id="dictionaryMatches" class="dictionary-matches" role="group" aria-label="Possible word spellings and forms" hidden></div>
-      <div id="dictionaryRelatedLabel" class="dictionary-group-label" hidden>Related words</div>
-      <div id="dictionaryRelated" class="dictionary-matches" role="group" aria-label="Related words"></div>
-    </div>
-    <button id="dictionaryRetry" type="button" hidden>Retry word options</button>
-  </div>
-  <div class="dictionary-meaning-region" id="dictionaryMeaningRegion" role="region" aria-labelledby="dictionaryMeaningTitle">
-    <div class="label" id="dictionaryMeaningTitle">MEANINGS OF THE SELECTED WORD</div>
-    <h3 id="dictionaryHeading" aria-live="polite">Choose a word above.</h3>
-    <div id="dictionaryMeanings" class="dictionary-meanings" role="region" aria-label="Possible meanings" tabindex="0"></div>
-    <button id="dictionaryMore" type="button" hidden>View all meanings</button>
-    <p id="dictionaryCounts" class="dictionary-meta"></p>
-    <p class="dictionary-credit">English definitions · <a href="https://en-word.net/downloads" target="_blank" rel="noopener noreferrer">Open English Wordnet 2025</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) and project glossary.</p>
-  </div>
-</section>
-<section class="card" id="storagePanel" style="margin-top:18px">
-  <div class="label">WORD BOOK · SAVED WITH CONTEXT</div>
-  <div class="bar">
-    <button class="primary" id="saveTranslation" disabled>Save natural translation</button>
-    <button id="reviewTranslations" disabled>Review saved translations</button><button id="reviewWords">Review wordbook</button>
-  </div>
-  <p id="storageStatus" role="status" aria-live="polite"></p>
-  <div id="savedWords" hidden></div><div id="savedTranslations" style="max-height:520px;overflow:auto" hidden></div>
-</section>
-<div class="metrics"><div>Elapsed<b id="elapsed">00:00</b></div><div>ASR<b id="asr">—</b></div><div>LLM request<b id="api">—</b></div><div>Knob<b id="hardware">Checking</b></div><div>Selection<b id="number">—</b></div></div>
-<details><summary>Raw JSON result</summary><pre id="json">No result yet.</pre></details><details><summary>Connection status and logs</summary><pre id="logs"></pre></details>
-<footer>The microphone starts automatically and keeps the latest 30 seconds in a rolling buffer. The analysis window is frozen at button press, so later speech cannot change the request.<br>If the topic is unclear, choose one of two context options before translation or saving.<br>Pause listening before changing the input language, then resume. Context detection and translation can be imperfect.</footer>
-<div id="snackbar" class="snackbar" role="status" aria-live="polite"></div>
-<script src="/transcript_view.js"></script>
-<script>
-const $=id=>document.getElementById(id);let busy=false,lastAnswers='',lastContext='',lastContextBadge='',lastWordNotice='',currentChatId=null;const names={translation:'Natural translation',literal:'Literal translation',explanation:'Context explanation'};
-function showSnackbar(text,failed=false){const bar=$('snackbar');bar.textContent=text;bar.className='snackbar visible'+(failed?' error':'');clearTimeout(window.snackbarTimer);window.snackbarTimer=setTimeout(()=>bar.className='snackbar',3500);}
-window.selectDictionaryWord=index=>action('word-select',{index});
-async function action(path,extra={}){if(busy)return;busy=true;try{const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:$('language').value,target_language:$('target').value,...extra})});const d=await r.json();if(!r.ok)throw Error(d.error);await refresh()}catch(e){$('error').textContent=e.message;if(path==='word-save')showSnackbar(e.message,true)}finally{busy=false}}
-$('newChat').onclick=()=>action('new-chat');
-for(const id of ['start','stop','analyze','speak'])$(id).onclick=()=>action(id);
-$('contextRetry').onclick=()=>action('analyze');
-$('contextMode').onchange=()=>action('context-mode',{mode:$('contextMode').value});
-let liveStreamId=null,liveRevision=-1;
-function resetChatUi(){
-  lastAnswers='';lastContext='';lastContextBadge='';lastWordNotice='';
-  liveStreamId=null;liveRevision=-1;window.archiveKey=null;
-  for(const id of ['liveTranscript','source','selected','snapshotRange','targetSource','asrQuality','json','wordNotice','contextTopic','contextEvidence','contextPrompt','chatCategory','chatInfo','storageStatus','asr','api','elapsed','selectionLabel']){
-    $(id).textContent='';
-  }
-  $('liveTranscript').textContent='Waiting for speech.';
-  $('source').textContent='Speak after listening starts.';
-  $('selected').textContent='Waiting for a result.';
-  $('selectionLabel').textContent='The selected answer number appears on the board.';
-  $('asr').textContent='—';$('api').textContent='—';$('elapsed').textContent='00:00';
-  $('level').textContent='— dBFS';$('fill').style.width='0';
-  $('json').textContent='No result yet.';
-  $('chatCategory').textContent='No context set';
-  $('chatInfo').textContent='Choose Casual or Professional on the first analysis.';
-  $('contextCategory').textContent='No context selected';
-  $('contextOrigin').textContent='';$('contextOrigin').hidden=true;
-  $('contextSummary').className='card context-summary unknown';
-  $('contextQuestion').hidden=true;$('contextOptions').replaceChildren();
-  $('answers').replaceChildren();$('number').textContent='—';
-  $('savedTranslations').replaceChildren();$('savedTranslations').hidden=true;
-  $('recallNotice').hidden=true;$('error').textContent='';
-}
-function showLive(live,active=true){
-  if(live && live.stream_id===liveStreamId && live.revision<liveRevision)return;
-  if(live?.stream_id!==liveStreamId){liveStreamId=live?.stream_id;liveRevision=-1;}
-  if(live?.revision!==undefined)liveRevision=live.revision;
-  const silent=live?.speech_status==='non_speech'||live?.asr_quality?.status==='non_speech';
-  const text=live?.transcript||(silent?'No speech detected.':active?'Waiting for speech.':'Listening is paused.');
-  let range=null;
-  if(live?.sentence_based){if(live.draft_text)range={start:(live.committed_text||'').length+(live.committed_text?1:0),end:text.length};}
-  else if(!silent&&live?.transcript)range=TranscriptView.lastSentence(text);
-  TranscriptView.render($('liveTranscript'),text,range,'live');
-  const count=live?.confirmed_sentences?.length||0;
-  $('liveProgress').textContent=silent?(live?.transcript?'No speech · keeping the previous transcript.':'No speech'):live?.sentence_based?`Committed ${count} sentence(s) · updating the blue sentence`:live?.partial?'Recognizing words · the sentence may change':'Latest transcript · listening for the next word';
-}
-const liveEvents=new EventSource('/api/live');
-liveEvents.addEventListener('transcript',event=>{try{showLive(JSON.parse(event.data));}catch(error){console.warn('Live transcript event failed',error);}});
-window.addEventListener('pagehide',()=>liveEvents.close(),{once:true});
-function elapsed(ms){const seconds=Math.floor((ms||0)/1000);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')}
-async function refresh(){try{const s=await(await fetch('/api/state')).json();const newChat=currentChatId!==null&&currentChatId!==s.chat_id;if(newChat)resetChatUi();currentChatId=s.chat_id;updateStorageControls(s);if(!newChat)window.updateDictionarySuggestions?.(s);const active=['starting','recording','stopping'].includes(s.status),working=['transcribing','thinking','speaking'].includes(s.stage);$('start').disabled=active||s.model_status!=='ready';$('stop').disabled=!active||s.status==='stopping';$('analyze').disabled=s.status!=='recording'||working;$('speak').disabled=!s.answers.length||['transcribing','thinking'].includes(s.stage);$('language').disabled=active;$('target').disabled=active;$('badge').textContent=({loading:'Model starting',idle:'Ready',recording:'● Recording',transcribing:'Transcribing',thinking:'Analyzing context',ready:'Choose an answer',speaking:'Playing audio',error:'Error',clarifying:'Choose a context'})[s.stage]||s.stage;$('badge').className='badge'+(s.model_status==='ready'?' active':'');$('error').textContent=[s.error,s.hardware_error&&'Knob: '+s.hardware_error].filter(Boolean).join('\n');
-if(s.level){const db=20*Math.log10(Math.max(s.level.rms,1e-6));$('level').textContent=Math.round(db)+' dBFS';$('fill').style.width=Math.max(0,Math.min(100,(db+65)/65*100))+'%';$('elapsed').textContent=elapsed(s.level.elapsed_ms)}
-$('contextMode').value=s.context_mode||'sentences';$('contextMode').disabled=working||Boolean(s.pending_context);
-$('listener').textContent=active?'● Listening continuously':'Listening paused';
-showLive(s.live,active);
-$('newChat').disabled=s.model_status!=='ready';
-$('chatCategory').textContent=s.chat_mode?`${s.chat_mode} · active for this chat`:'No context set';
-$('chatInfo').textContent=s.chat_mode?'The topic is inferred from the conversation. New chat resets this setting.':'Choose Casual or Professional on the first analysis. Previous chats do not affect it.';
-const recall=s.recall;const showRecall=recall&&recall.chat_id===s.chat_id&&Date.now()/1000-recall.time<10;
-$('recallNotice').hidden=!showRecall;
-$('recallNotice').textContent=showRecall?'Word seen again · '+recall.hits.map(h=>h.word+' → '+h.heard+' (saved meaning: '+h.saved_meaning+')').join(' · ')+' · this sentence may have a different meaning. Review LED alert':'';
-for(const span of $('liveTranscript').querySelectorAll('.transcript-word'))span.classList.toggle('recall-word',Boolean(showRecall&&recall.hits.some(h=>span.textContent.replace(/[^\p{L}\p{N}]/gu,'').toLowerCase()===h.heard.toLowerCase())));
-const archiveKey=JSON.stringify([s.chat_archive?.length,s.chat_id]);if(window.archiveKey!==archiveKey){window.archiveKey=archiveKey;$('chatArchive').replaceChildren();for(const chat of [...(s.chat_archive||[])].reverse()){const item=document.createElement('details');const label=document.createElement('summary');label.textContent=(chat.mode||'No context set')+' · '+new Date(chat.ended_at*1000).toLocaleString();item.append(label);for(const message of chat.messages||[]){const text=document.createElement('p');text.textContent=(message.translation?.source||message.transcript)+' → '+(message.translation?.translation||'');item.append(text);}$('chatArchive').append(item);}}
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#3253dc"><title>IDK Button · Understand the meaning</title><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/dictionary.css"><script src="/idk_icons.js" defer></script><script src="/transcript_view.js" defer></script><script src="/clarification_view.js" defer></script><script src="/dictionary.js" defer></script><script src="/dashboard.js" defer></script></head><body><div id="idk-dashboard">
 
-const frozen=s.snapshot;const basis=(s.event?.context_mode||s.requested_context_mode||s.context_mode)==='sentences'?'Up to 5 recent sentences':'Recent 30 seconds';$('snapshotRange').textContent=frozen?`${basis} · audio window ${frozen.window_seconds.toFixed(1)} seconds (${elapsed(frozen.window_start_ms)}–${elapsed(frozen.window_end_ms)})`:'Press Analyze current context to freeze the selected window.';
-$('targetSource').textContent=s.event?.transcript && s.event?.asr_quality?.status!=='non_speech'?'The green sentence is the current analysis target.':'';
-const badge=TranscriptView.contextBadge(s);const badgeKey=JSON.stringify(badge);if(badgeKey!==lastContextBadge){lastContextBadge=badgeKey;$('contextSummary').className='card context-summary '+badge.kind;$('contextCategory').textContent=badge.label;$('contextOrigin').textContent=badge.origin;$('contextOrigin').hidden=!badge.origin;$('contextTopic').textContent=badge.topic;$('contextEvidence').textContent=badge.evidence?'Evidence: '+badge.evidence:'';}
-const pending=s.pending_context;$('contextQuestion').hidden=!pending;
-const contextKey=JSON.stringify([pending,s.selected]);if(contextKey!==lastContext){lastContext=contextKey;$('contextOptions').replaceChildren();$('contextPrompt').textContent=pending?.question||'';if(pending){for(const [i,label] of pending.options.entries()){const button=document.createElement('button');button.className='answer'+(s.selected===i?' chosen':'');button.textContent=label;button.onclick=()=>action('context',{index:i,snapshot_id:pending.snapshot_id});$('contextOptions').append(button)}}}
-const e=s.event;const frozenText=(e?.asr_quality?.status==='non_speech'?'No speech detected.':e?.model_context_text||e?.transcript)||'Analyze a context window to freeze it.';TranscriptView.render($('source'),frozenText,e?.transcript && e?.asr_quality?.status!=='non_speech'?TranscriptView.selectedRange(frozenText,s.context_decision?.source):null,'frozen');$('asr').textContent=e?.asr_seconds?e.asr_seconds.toFixed(2)+'s':'—';$('api').textContent=e?.api_seconds?e.api_seconds.toFixed(2)+'s':'—';$('json').textContent=e?JSON.stringify({transcript:e.transcript,asr_confidence:e.asr_confidence,asr_quality:e.asr_quality,asr_alternatives:e.asr_alternatives||[],result:e.translation},null,2):'No result yet.';
-$('asrQuality').textContent=e?.asr_quality?.status==='non_speech'?'No speech detected.':e?.asr_quality?.status==='needs_review'?'Review the transcript. The recognizer marked it as uncertain.':'';
-const word=s.words?.[s.word_index];
-const wordKey=JSON.stringify([s.words,s.word_index,s.pending_context,s.generation,s.stage,s.answers,s.selected]);
-if(wordKey!==lastAnswers){lastAnswers=wordKey;
-  window.updateDictionarySelection?.(s.word_index,s.words);
-  $('answers').replaceChildren();for(const [i,answer] of s.answers.entries()){const card=document.createElement('button');card.className='answer'+(i===s.selected?' chosen':'');card.setAttribute('aria-pressed',String(i===s.selected));card.disabled=working;const label=document.createElement('strong');label.textContent=(i+1)+' · '+(names[answer.kind]||answer.kind);const text=document.createElement('span');text.textContent=answer.text;card.append(label,text);card.onclick=()=>action('select',{index:i});$('answers').append(card);}
-  const selectedAnswer=s.answers[s.selected];
-  $('selected').textContent=selectedAnswer?.text||s.event?.translation?.translation||'Waiting for a result.';
-  $('selectionLabel').textContent=selectedAnswer?(s.selected+1)+' / '+s.answers.length+' · '+(names[selectedAnswer.kind]||selectedAnswer.kind):word?'Rotate the knob to choose a word, then press it to save.':'The selected answer number appears on the board.';
-  $('number').textContent=selectedAnswer?String(s.selected+1):'—';
-}
-$('wordNotice').textContent=s.word_notice||'';
-if(s.word_notice&&s.word_notice!==lastWordNotice){lastWordNotice=s.word_notice;showSnackbar(s.word_notice,!s.word_notice.endsWith('saved to your wordbook.'));}
-window.currentWordState=s;
-$('hardware').textContent=s.hardware?.knob_ok?'Connected · 0x'+s.hardware.address.toString(16):'Not detected';$('logs').textContent=JSON.stringify(s.hardware,null,2)+'\n\n'+s.logs.join('\n');}catch(e){$('badge').textContent='Server disconnected'}}
-
-$('reviewWords').onclick=async()=>{try{
- const entries=await storageRequest('words');$('savedWords').replaceChildren();
- const note=document.createElement('p');note.textContent=entries.length?'Recently saved words · up to 50':'No saved words yet.';$('savedWords').append(note);
- for(const entry of entries){const card=document.createElement('article');card.className='answer';const title=document.createElement('strong');title.textContent=entry.expression+' → '+entry.meaning;const example=document.createElement('p');example.textContent=entry.example;card.append(title,example);$('savedWords').append(card);}
- $('savedWords').hidden=false;
-}catch(error){storageMessage(error.message,true)}};
-
-let storageState = null, storageBusy = false;
-
-function storageMessage(message, failed = false) {
-  $('storageStatus').textContent = message;
-  $('storageStatus').className = failed ? 'error' : '';
-}
-
-function updateStorageControls(s) {
-  storageState = s;
-  const ready = s?.event?.asr_quality?.status !== 'non_speech'
-    && !/^\s*\[BLANK_AUDIO\]\s*$/i.test(s?.event?.transcript || '')
-    && Boolean(s?.event?.translation?.translation) && !s?.preview_mode
-    && !s?.pending_context
-    && !['loading', 'thinking', 'transcribing', 'clarifying', 'error'].includes(s?.stage);
-  $('saveTranslation').disabled = storageBusy || !ready;
-  $('reviewTranslations').disabled = storageBusy;
-}
-
-async function storageRequest(path, options = {}) {
-  const response = await fetch('/api/' + path, options);
-  const data = await response.json();
-  if (!response.ok) throw Error(data.error || 'Storage request failed.');
-  return data;
-}
-
-async function loadSavedTranslations() {
-  const entries = await storageRequest('translations');
-  if (!Array.isArray(entries)) throw Error('Invalid saved translation list.');
-  const list = $('savedTranslations');
-  list.replaceChildren();
-  const note = document.createElement('p');
-  note.textContent = entries.length
-    ? 'Most recent saved translations (up to 50).'
-    : 'No saved translations yet.';
-  list.append(note);
-  for (const entry of entries) {
-    const card = document.createElement('article');
-    card.className = 'answer';
-    const label = document.createElement('strong');
-    label.textContent = entry.source_language.toUpperCase() + ' → '
-      + entry.target_language.toUpperCase() + ' · '
-      + new Date(entry.created_at).toLocaleString();
-    const source = document.createElement('p');
-    source.className = 'source';
-    source.textContent = entry.source;
-    const translation = document.createElement('p');
-    translation.className = 'selected';
-    translation.textContent = entry.translation;
-    card.append(label, source, translation);
-    for (const alternative of entry.alternatives || []) {
-      const line = document.createElement('p');
-      line.textContent = alternative.context + ': ' + alternative.translation;
-      card.append(line);
-    }
-    list.append(card);
-  }
-  list.hidden = false;
-  return entries.length;
-}
-
-$('saveTranslation').onclick = async () => {
-  if (storageBusy || $('saveTranslation').disabled) return;
-  storageBusy = true;
-  updateStorageControls(storageState);
-  storageMessage('Saving…');
-  try {
-    const saved = await storageRequest('save', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: '{}'
-    });
-    let message = 'Saved translation #' + saved.id + '.';
-    if (!$('savedTranslations').hidden) {
-      try { await loadSavedTranslations(); }
-      catch (error) { message += ' Review could not refresh. Click Review saved to retry.'; }
-    }
-    storageMessage(message);
-  } catch (error) {
-    storageMessage(error.message, true);
-  } finally {
-    storageBusy = false;
-    updateStorageControls(storageState);
-  }
-};
-
-$('reviewTranslations').onclick = async () => {
-  if (storageBusy) return;
-  storageBusy = true;
-  updateStorageControls(storageState);
-  storageMessage('Loading saved translations…');
-  try {
-    const count = await loadSavedTranslations();
-    storageMessage(count + ' saved translation(s).');
-  } catch (error) {
-    storageMessage(error.message, true);
-  } finally {
-    storageBusy = false;
-    updateStorageControls(storageState);
-  }
-};
-
-updateStorageControls(null);
-
-refresh();setInterval(refresh,500);
-</script></html>
+  <div class="idk-topline"><span><span id="modeLabel">EXECUTORCH HACKATHON · LOCAL AI</span></span><span class="idk-board"><i data-idk-icon="circuit-board" aria-hidden="true"></i>Built with Arduino VENTUNO Q</span></div>
+  <header class="idk-header">
+    <div class="idk-brand"><span class="idk-mark"><i data-idk-icon="audio-lines" aria-hidden="true"></i></span>idk button<span class="idk-brand-dot">.</span></div>
+    <nav class="idk-nav" aria-label="Main navigation"><button type="button" data-idk-nav="conversation" aria-pressed="true">Conversation</button><button type="button" data-idk-nav="wordbook" aria-pressed="false">Wordbook <span id="savedCount"></span></button></nav>
+    <div class="idk-colour-names" aria-label="Colour inspiration: Qualcomm and Snapdragon"><span class="idk-qualcomm">Qualcomm</span><span class="idk-brand-divider"></span><span class="idk-snapdragon">Snapdragon</span></div>
+  </header>
+  <div class="idk-main">
+    <div class="idk-hero"><div><div class="idk-eyebrow">ONE TAP. A CLEARER CONVERSATION.</div><h1>Understand the meaning.<br>Keep the connection.</h1><p class="idk-subtitle">A little context makes all the difference.</p></div><span class="idk-private"><i data-idk-icon="shield-check" aria-hidden="true"></i>Private by design</span></div>
+    <section id="conversationPage">
+      <div class="idk-controls"><div class="idk-languages"><select id="language" aria-label="Input language"><option value="en">English</option><option value="ko">Korean</option></select><span class="idk-icon"><i data-idk-icon="arrow-right" aria-hidden="true"></i></span><select id="target" aria-label="Translation language"><option value="ko">Korean</option><option value="en">English</option></select></div><label for="previewExample" id="previewControl" hidden>Try an example<select id="previewExample"><option value="0">Dinner · ambiguous</option><option value="1">Dinner · at 8</option><option value="2">Dinner · without salt</option><option value="3">Ground · ambiguous</option><option value="4">Ground · electrical</option><option value="5">Ground · physical</option></select></label><span class="idk-device-badge" id="badge" role="status">Connecting</span><button type="button" id="analyze" class="idk-primary"><i data-idk-icon="sparkles" aria-hidden="true"></i>Understand this</button></div>
+      <div class="idk-steps" aria-label="Interpretation steps"><span id="stepListen"><em>1</em>Listen</span><span id="stepMeaning"><em>2</em>Understand</span><span id="stepTranslate"><em>3</em>Translate &amp; save</span></div>
+      <div id="progressStrip" class="progress-strip" role="status" hidden><span class="spinner" aria-hidden="true"></span><div><strong id="progressTitle">Finding the intended meaning</strong><p id="progressText"></p></div></div><p id="error" class="error" role="alert"></p><div class="idk-panels">
+        <section class="idk-panel" aria-labelledby="conversationTitle"><div class="idk-panel-title"><h2 id="conversationTitle"><span class="idk-panel-num">01</span>The conversation</h2><span class="idk-sample" id="listener" role="status">Connecting microphone</span></div><div class="idk-transcript-box"><div class="idk-small-label">WHAT WE HEARD</div><div id="liveTranscript" class="idk-transcript word-transcript" aria-label="Live transcript">Waiting for speech.</div><div class="idk-wave-row"><div class="idk-wave" aria-hidden="true"><span style="height:5px"></span><span style="height:12px"></span><span style="height:17px"></span><span style="height:9px"></span><span style="height:15px"></span><span style="height:7px"></span><span style="height:11px"></span><span style="height:4px"></span></div><span id="liveProgress" role="status">Preparing live recognition</span></div></div><details class="frozen-details"><summary>See the moment being interpreted</summary><div id="source" class="word-transcript" aria-label="Frozen context with selected sentence">Choose Understand this to keep the current moment.</div><p id="snapshotRange"></p><p id="targetSource"></p><p id="asrQuality"></p></details><div id="recallNotice" class="recall-notice" role="status" hidden></div><div class="idk-context"><div id="contextSummary"><div class="idk-small-label">CONTEXT AT A GLANCE</div><p id="contextTopic">Speak naturally, then choose Understand this.</p><span id="contextOrigin" class="context-origin" hidden></span><p id="contextEvidence"></p><div id="contextSourceNote" class="idk-source-note"><i data-idk-icon="message-circle-question" aria-hidden="true"></i><span id="contextCategory">Ready when you are.</span></div></div></div></section>
+        <section class="idk-panel" aria-labelledby="translationTitle"><div class="idk-panel-title"><h2 id="translationTitle"><span class="idk-panel-num">02</span>A clearer meaning</h2><span class="idk-language-tag" id="translationLanguage">Korean</span></div>
+          <div id="contextQuestion" class="idk-clarify" hidden><div class="idk-check-kicker"><i data-idk-icon="message-circle-question" aria-hidden="true"></i>A QUICK MEANING CHECK</div><h3 id="contextPrompt" tabindex="-1">What do you mean by “make it”?</h3><p>Choose what the speaker intended.</p><div id="contextOptions" role="group" aria-label="Choose a meaning"></div><div class="idk-likelihood"><i data-idk-icon="info" aria-hidden="true"></i><span id="likelihoodNote">Likelihood is not measured.</span></div><button id="contextRetry" type="button" class="idk-text-button">Neither? Say a little more, then try again →</button></div>
+          <div id="translationResult"><div class="idk-result-box"><div class="idk-small-label">YOUR TRANSLATION</div><p id="selected" class="idk-translation" aria-live="polite">Your translation will appear here.</p><div class="idk-resolved-meaning"><i data-idk-icon="check" aria-hidden="true"></i><span id="selectionLabel"></span></div></div><div class="idk-result-actions"><button type="button" id="changeMeaning" class="idk-secondary" hidden><i data-idk-icon="rotate-ccw" aria-hidden="true"></i>Change meaning</button><button type="button" id="saveTranslation" class="idk-primary" disabled><i data-idk-icon="bookmark-plus" aria-hidden="true"></i><span id="saveLabel">Save translation</span></button></div><p id="storageStatus" class="idk-feedback" role="status" aria-live="polite"></p><details class="translation-more"><summary>Other ways to understand it</summary><button id="speak" type="button" class="idk-secondary" disabled><i data-idk-icon="volume-2" aria-hidden="true"></i>Listen to selected answer</button><div id="answers"></div></details><p id="wordNotice" class="idk-helper" role="status"></p></div>
+        </section>
+      </div>
+      <section class="idk-dictionary" id="dictionaryPanel" aria-labelledby="dictionaryTitle">
+        <div id="dictionaryWordRegion" class="dictionary-word-region"><div class="idk-word-heading"><span class="idk-icon"><i data-idk-icon="book-open" aria-hidden="true"></i></span><h2 id="dictionaryTitle">Words worth keeping</h2></div><p id="dictionaryStatus" role="status" aria-live="polite">Words appear automatically after a translation.</p><p id="dictionaryResult" hidden></p><div class="dictionary-word-options"><div id="dictionaryTerms" class="dictionary-matches" role="group" aria-label="Words from this result"></div><div id="dictionaryMatchesLabel" class="dictionary-group-label" hidden>Possible spellings &amp; word forms</div><div id="dictionaryMatches" class="dictionary-matches" role="group" aria-label="Possible spellings" hidden></div><div id="dictionaryRelatedLabel" class="dictionary-group-label" hidden>Related words</div><div id="dictionaryRelated" class="dictionary-matches" role="group" aria-label="Related words"></div></div><button id="dictionaryRetry" class="idk-secondary" type="button" hidden>Retry word options</button></div>
+        <div class="idk-definition dictionary-meaning-region" id="dictionaryMeaningRegion" aria-labelledby="dictionaryMeaningTitle"><div id="dictionaryMeaningTitle" class="idk-small-label">MEANINGS OF THE SELECTED WORD</div><h3 id="dictionaryHeading" aria-live="polite">Choose a word.</h3><div id="dictionaryMeanings" role="region" aria-label="Possible meanings" tabindex="0"></div><button id="dictionaryMore" type="button" class="idk-secondary" hidden>View all meanings</button><details class="dictionary-credit"><summary>Dictionary source</summary><p id="dictionaryCounts"></p><p>English definitions · <a href="https://en-word.net/downloads" target="_blank" rel="noopener noreferrer">Open English Wordnet 2025</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) and project glossary.</p></details></div>
+      </section>
+      <details class="device-controls"><summary>Listening &amp; conversation controls</summary><div class="device-control-row"><label for="contextMode">Context window <select id="contextMode" aria-label="Context window"><option value="sentences">Recent 5 sentences</option><option value="time">Recent 30 seconds</option></select></label><button id="start" class="idk-secondary">Resume listening</button><button id="stop" class="idk-secondary">Pause listening</button><button id="newChat" class="idk-secondary">New conversation</button><label for="chatMode">Style <select id="chatMode"><option value="">Automatic</option><option value="Casual">Casual</option><option value="Professional">Professional</option></select></label></div><p class="idk-helper">Turn the knob to explore words or meanings. Press to choose or save a word. Hold to start a new conversation.</p><h3 id="chatCategory">Automatic context</h3><p id="chatInfo" class="idk-helper">Context comes from this conversation.</p><details><summary>Previous conversations</summary><div id="chatArchive"></div></details></details>
+    </section>
+    <section id="storagePanel" class="idk-panel" hidden aria-labelledby="wordbookTitle"><div class="idk-panel-title"><h2 id="wordbookTitle">Your wordbook</h2><span class="idk-sample">Stored on this device</span></div><div class="wordbook-actions"><button id="reviewTranslations" class="idk-secondary" aria-pressed="true">Saved translations</button><button id="reviewWords" class="idk-secondary" aria-pressed="false">Saved words</button></div><p id="reviewStatus" class="idk-helper" role="status"></p><div id="savedTranslations" hidden></div><div id="savedWords" hidden></div></section>
+    <details class="diagnostics"><summary>Device details</summary><div class="metrics"><div>Audio window<b id="elapsed">00:00</b></div><div>Speech recognition<b id="asr">—</b></div><div>AI request<b id="api">—</b></div><div>Knob<b id="hardware">Checking</b></div><div>Selection<b id="number">—</b></div><div>Microphone<b id="level">— dBFS</b><div class="meter"><div id="fill" class="fill"></div></div></div></div><details><summary>Result data</summary><pre id="json">No result yet.</pre></details><details><summary>Connection logs</summary><pre id="logs"></pre></details></details>
+    <footer class="idk-footer"><span><span id="footerStatus">Local processing · AI interpretations can be imperfect</span></span><div class="idk-colour-key"><span><i class="idk-dot idk-dot-blue"></i>Qualcomm blue</span><span><i class="idk-dot idk-dot-red"></i>Snapdragon red</span><span><i class="idk-dot idk-dot-teal"></i>Arduino teal</span></div></footer>
+  </div><div id="snackbar" class="snackbar" role="status" aria-live="polite"></div></div></body></html>

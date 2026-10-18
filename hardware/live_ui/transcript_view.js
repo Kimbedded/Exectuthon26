@@ -39,17 +39,17 @@
   }
   function contextBadge(state){
     const decision=state.context_decision||{};
-    if(state.pending_context)return {kind:'unknown',label:'Context check required',origin:'Waiting for user choice',topic:decision.question||'Choose the situation where this was said.',evidence:''};
+    if(state.pending_context)return {kind:'unknown',label:'One quick meaning check',origin:'Waiting for your choice',topic:state.pending_context.question||'Choose what the speaker meant.',evidence:''};
     const selected=state.event?.selected_context||(decision.decision_method==='user_chat_category'?state.chat_mode:null);
     const topic=selected||decision.topic||'';
-    if(!topic)return {kind:'unknown',label:['thinking','transcribing'].includes(state.stage)?'Analyzing context':'No context selected',origin:'',topic:'Analyze a context window to show the current context.',evidence:''};
+    if(!topic)return {kind:'unknown',label:['thinking','transcribing'].includes(state.stage)?'Understanding this moment':'Ready when you are',origin:'',topic:'Speak naturally, then choose Understand this.',evidence:''};
     const technical=/\b(electrical|circuits?|grounding|software|mechanical|engineering|network|hardware|computer|professional|technical|financial)\b|전기|회로|접지|기계|조립|소프트웨어|하드웨어|네트워크|기술|전문|업무|금융|은행/i.test(topic);
     const casual=/\b(casual|everyday|nontechnical|physical floor|earth surface|river bank)\b|캐주얼|일상|일반적인|바닥|땅|강가|강둑/i.test(topic);
     const kind=technical===casual?'unknown':technical?'technical':'casual';
-    const displayTopic=selected?selected:/electrical.*(?:ground|circuit)/i.test(topic)?'Electrical circuit · grounding':/physical floor|earth surface/i.test(topic)?'Floor · ground':/computer.*(?:network|port)/i.test(topic)?'Network · connection port':/financial bank/i.test(topic)?'Finance · bank':/bank alongside a river/i.test(topic)?'Riverside · river bank':topic;
-    return {kind,label:kind==='technical'?'Technical · work context':kind==='casual'?'Everyday · casual context':'Technical / casual unclear',
-      origin:selected?'User selection':kind==='unknown'?'Topic only':'Automatic classification · reference',
-      topic:displayTopic,evidence:selected?'The selected context is applied.':decision.evidence||''};
+    const displayTopic=selected?selected:decision.meaning_options?.[decision.selected_option]||(/electrical.*(?:ground|circuit)/i.test(topic)?'Electrical circuit · grounding':/physical floor|earth surface/i.test(topic)?'Floor · ground':/computer.*(?:network|port)/i.test(topic)?'Network · connection port':/financial bank/i.test(topic)?'Finance · bank':/bank alongside a river/i.test(topic)?'Riverside · river bank':topic);
+    return {kind,label:selected?'Meaning chosen by you':'Meaning from the conversation',
+      origin:selected?'Your selection':state.event?.transcript?.includes(decision.evidence)?'From this sentence':'From recent context',
+      topic:displayTopic,evidence:selected?'':decision.evidence||''};
   }
   const api={lastSentence,selectedRange,tokens,render,contextBadge};root.TranscriptView=api;
   if(typeof module!=='undefined' && module.exports)module.exports=api;

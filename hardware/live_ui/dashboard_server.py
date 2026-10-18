@@ -171,10 +171,8 @@ def process_snapshot(row):
     STATE['event']=dict(row)
     payload={**text_request,'source_language':STATE['source_language'],
              'target_language':STATE['target_language'],'elapsed_ms':row.get('elapsed_ms')}
-    mode=STATE.get('chat_mode')
-    if not mode:
-        STATE['pending_context']={'kind':'chat_mode','snapshot_id':STATE['snapshot_id'],'question':'What kind of conversation is this?','options':['Casual · everyday conversation','Professional · work or technical conversation']}
-        stage('clarifying');return
+    # Conversation style is optional. Ask about the actual ambiguous expression,
+    # rather than making a first-time user choose a broad category first.
     def run():
         try:
             decision=api_request('context/resolve',payload)
@@ -211,7 +209,12 @@ def translate_snapshot(row,payload,decision,session,generation,selection=None):
     options=dictionary_options(result,context,STATE['source_language'],STATE['target_language'])
     with LOCK:
         if CLOSING or session!=STATE['session'] or generation!=STATE['generation']:return
-        STATE['event']={**row,'chat_mode':STATE.get('chat_mode'),'translation':result,'translation_context':context,'api_seconds':time.perf_counter()-tick,'selected_context':selection}
+        choices=decision if decision.get('options') else ({**decision,'options':decision['meaning_options'],
+            'question':'Would you like to use a different meaning?'} if decision.get('meaning_options') else None)
+        STATE['event']={**row,'chat_mode':STATE.get('chat_mode'),'translation':result,'translation_context':context,'api_seconds':time.perf_counter()-tick,'selected_context':selection,'clarification_options':choices}
+        if selection:
+            STATE['context_decision']={**decision,'needs_clarification':False,'topic':selection,
+                'evidence':None,'question':None,'options':[],'decision_method':'user_selected_meaning'}
         STATE['chat_messages']=(STATE.get('chat_messages',[])+[dict(STATE['event'])])[-100:]
         STATE.update(answers=result['answers'],selected=0,pending_context=None,error=None)
         source=result.get('source') or decision.get('source') or payload['transcript']
@@ -240,6 +243,25 @@ def choose_context(index,snapshot_id):
                 if CLOSING or session!=STATE['session'] or generation!=STATE['generation']:return
                 STATE['pending_context']=pending;STATE['error']=str(error);stage('clarifying')
     threading.Thread(target=run,daemon=True).start()
+
+def reopen_context(snapshot_id):
+    """Reconsider only the currently displayed, completed frozen snapshot."""
+    with LOCK:
+        if snapshot_id != STATE.get('snapshot_id'):
+            raise ValueError('This result is stale. Use the current translation.')
+        if STATE['stage'] != 'ready' or STATE.get('pending_context'):
+            raise ValueError('Wait for the translation to finish.')
+        event=STATE.get('event') or {}
+        choices=event.get('clarification_options')
+        if not choices or len(choices.get('options',[])) != 2:
+            raise ValueError('No meaning choices are available for this result.')
+        STATE['generation']+=1
+        STATE['event']={key:value for key,value in event.items()
+                        if key not in {'translation','translation_context','selected_context','clarification_options'}}
+        decision={**choices,'needs_clarification':True,'topic':None,'evidence':None}
+        STATE.update(answers=[],words=[],word_source='',word_notice='',selected=0,error=None,
+                     context_decision=decision,pending_context={**decision,'snapshot_id':snapshot_id})
+        stage('clarifying')
 
 def initialize():
     global PROCESS
@@ -509,6 +531,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status);self.send_header('Content-Type',content_type);self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
     def do_GET(self):
         if serve_dictionary(self, ROOT):return
+        if self.path in {'/dashboard.css','/clarification_view.js','/dashboard.js','/idk_icons.js'}:
+            self.reply(200,(ROOT/self.path[1:]).read_bytes(),
+                       'text/css; charset=utf-8' if self.path.endswith('.css') else 'application/javascript; charset=utf-8')
+            return
         if self.path == '/':
             self.reply(200, (ROOT / 'dashboard.html').read_bytes(),
                        'text/html; charset=utf-8')
@@ -582,6 +608,11 @@ class Handler(BaseHTTPRequestHandler):
                 if mode not in {'sentences','time'}:raise ValueError('Invalid context mode')
                 with LOCK:STATE['context_mode']=mode
             elif self.path=='/api/context':choose_context(data.get('index'),data.get('snapshot_id'))
+            elif self.path=='/api/context-reopen':reopen_context(data.get('snapshot_id'))
+            elif self.path=='/api/chat-mode':
+                mode=data.get('mode')
+                if mode not in {None,'Casual','Professional'}:raise ValueError('Invalid conversation style')
+                with LOCK:STATE['chat_mode']=mode
             elif self.path=='/api/select':
                 with LOCK:
                     index=data.get('index')

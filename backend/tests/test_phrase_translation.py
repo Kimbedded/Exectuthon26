@@ -12,7 +12,7 @@ def sse(body):
 
 
 class PhraseAlternativeTests(unittest.TestCase):
-    def test_ambiguous_phrase_attaches_a_calibrated_alternative(self):
+    def test_ambiguous_phrase_keeps_accuracy_null_even_with_model_votes(self):
         stream = sse({'translation': '오늘 밤에 올 수 있어?', 'alternatives': []})
         plain = io.BytesIO(json.dumps(
             {'choices': [{'message': {'content': '오늘 밤에 저녁을 만들 수 있어?'}}]}
@@ -30,7 +30,7 @@ class PhraseAlternativeTests(unittest.TestCase):
             result = m.translate("I'm cooking dinner, can you make it tonight?")
 
         self.assertTrue(result['valid'])
-        self.assertEqual(result['result']['translation_confidence'], 0.75)
+        self.assertIsNone(result['result']['translation_confidence'])
         alternatives = result['result']['alternatives']
         self.assertEqual(len(alternatives), 1)
         self.assertEqual(alternatives[0]['probability'], 0.25)
@@ -50,7 +50,7 @@ class PhraseAlternativeTests(unittest.TestCase):
              patch.object(m.urllib.request, 'urlopen', return_value=stream):
             result = m.translate("I'm cooking dinner, can you make it tonight?")
         self.assertTrue(result['valid'])
-        self.assertEqual(result['result']['translation_confidence'], 0.95)
+        self.assertIsNone(result['result']['translation_confidence'])
         self.assertEqual(result['result']['alternatives'], [])
 
     def test_sentence_without_a_lexicon_phrase_is_unaffected(self):
