@@ -38,13 +38,18 @@ class RecallTests(unittest.TestCase):
 class ChatTests(unittest.TestCase):
  def setUp(self):
   self.old=copy.deepcopy(d.STATE);self.temp=tempfile.TemporaryDirectory();self.patch=patch.object(d,'ROOT',Path(self.temp.name));self.patch.start()
-  d.STATE.update(chat_id='old',chat_mode='Professional',chat_messages=[{'transcript':'old topic'}],model_status='ready',status='recording',stage='ready',session=3,generation=7,live={'transcript':'old words'},frozen_sentence_context='old words',chat_archive=[])
+  d.STATE.update(chat_id='old',chat_mode='Professional',chat_messages=[{'transcript':'old topic'}],model_status='ready',status='recording',stage='ready',session=3,generation=7,live={'transcript':'old words'},frozen_sentence_context='old words',chat_archive=[],vocabulary=[{'expression':'keep','meaning':'유지'}])
  def tearDown(self):d.STATE.clear();d.STATE.update(self.old);self.patch.stop();self.temp.cleanup()
  def test_hold_creates_unset_chat_and_empty_pcm_session_while_preserving_archive(self):
   with patch.object(d,'send') as send:d.new_chat()
   self.assertEqual([x.args[0]['action'] for x in send.call_args_list],['stop','start'])
   self.assertEqual(d.STATE['session'],4);self.assertIsNone(d.STATE['chat_mode']);self.assertIsNone(d.STATE['live']);self.assertFalse(d.STATE['frozen_sentence_context'])
   self.assertEqual(d.STATE['chat_archive'][0]['mode'],'Professional');self.assertEqual(d.STATE['chat_archive'][0]['messages'][0]['transcript'],'old topic')
+  self.assertEqual(d.STATE['vocabulary'],[{'expression':'keep','meaning':'유지'}])
+  self.assertEqual(d.STATE['answers'],[])
+  self.assertIsNone(d.STATE['event']);self.assertIsNone(d.STATE['snapshot'])
+  self.assertIsNone(d.STATE['pending_context']);self.assertIsNone(d.STATE['context_decision'])
+  self.assertEqual(d.STATE['logs'],[])
  def test_physical_hold_routes_to_new_chat_instead_of_analysis(self):
   d.STATE['hardware']={'rotations':0,'clicks':0,'holds':0}
   with patch.object(d,'new_chat') as new,patch.object(d,'analyze') as analyze:

@@ -54,7 +54,7 @@
 <div id="snackbar" class="snackbar" role="status" aria-live="polite"></div>
 <script src="/transcript_view.js"></script>
 <script>
-const $=id=>document.getElementById(id);let busy=false,lastAnswers='',lastContext='',lastContextBadge='',lastWordNotice='';const names={translation:'Natural translation',literal:'Literal translation',explanation:'Context explanation'};
+const $=id=>document.getElementById(id);let busy=false,lastAnswers='',lastContext='',lastContextBadge='',lastWordNotice='',currentChatId=null;const names={translation:'Natural translation',literal:'Literal translation',explanation:'Context explanation'};
 function showSnackbar(text,failed=false){const bar=$('snackbar');bar.textContent=text;bar.className='snackbar visible'+(failed?' error':'');clearTimeout(window.snackbarTimer);window.snackbarTimer=setTimeout(()=>bar.className='snackbar',3500);}
 window.selectDictionaryWord=index=>action('word-select',{index});
 async function action(path,extra={}){if(busy)return;busy=true;try{const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:$('language').value,target_language:$('target').value,...extra})});const d=await r.json();if(!r.ok)throw Error(d.error);await refresh()}catch(e){$('error').textContent=e.message;if(path==='word-save')showSnackbar(e.message,true)}finally{busy=false}}
@@ -63,6 +63,29 @@ for(const id of ['start','stop','analyze','speak'])$(id).onclick=()=>action(id);
 $('contextRetry').onclick=()=>action('analyze');
 $('contextMode').onchange=()=>action('context-mode',{mode:$('contextMode').value});
 let liveStreamId=null,liveRevision=-1;
+function resetChatUi(){
+  lastAnswers='';lastContext='';lastContextBadge='';lastWordNotice='';
+  liveStreamId=null;liveRevision=-1;window.archiveKey=null;
+  for(const id of ['liveTranscript','source','selected','snapshotRange','targetSource','asrQuality','json','wordNotice','contextTopic','contextEvidence','contextPrompt','chatCategory','chatInfo','storageStatus','asr','api','elapsed','selectionLabel']){
+    $(id).textContent='';
+  }
+  $('liveTranscript').textContent='Waiting for speech.';
+  $('source').textContent='Speak after listening starts.';
+  $('selected').textContent='Waiting for a result.';
+  $('selectionLabel').textContent='The selected answer number appears on the board.';
+  $('asr').textContent='—';$('api').textContent='—';$('elapsed').textContent='00:00';
+  $('level').textContent='— dBFS';$('fill').style.width='0';
+  $('json').textContent='No result yet.';
+  $('chatCategory').textContent='No context set';
+  $('chatInfo').textContent='Choose Casual or Professional on the first analysis.';
+  $('contextCategory').textContent='No context selected';
+  $('contextOrigin').textContent='';$('contextOrigin').hidden=true;
+  $('contextSummary').className='card context-summary unknown';
+  $('contextQuestion').hidden=true;$('contextOptions').replaceChildren();
+  $('answers').replaceChildren();$('number').textContent='—';
+  $('savedTranslations').replaceChildren();$('savedTranslations').hidden=true;
+  $('recallNotice').hidden=true;$('error').textContent='';
+}
 function showLive(live,active=true){
   if(live && live.stream_id===liveStreamId && live.revision<liveRevision)return;
   if(live?.stream_id!==liveStreamId){liveStreamId=live?.stream_id;liveRevision=-1;}
@@ -80,7 +103,7 @@ const liveEvents=new EventSource('/api/live');
 liveEvents.addEventListener('transcript',event=>{try{showLive(JSON.parse(event.data));}catch(error){console.warn('Live transcript event failed',error);}});
 window.addEventListener('pagehide',()=>liveEvents.close(),{once:true});
 function elapsed(ms){const seconds=Math.floor((ms||0)/1000);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')}
-async function refresh(){try{const s=await(await fetch('/api/state')).json();updateStorageControls(s);window.updateDictionarySuggestions?.(s);const active=['starting','recording','stopping'].includes(s.status),working=['transcribing','thinking','speaking'].includes(s.stage);$('start').disabled=active||s.model_status!=='ready';$('stop').disabled=!active||s.status==='stopping';$('analyze').disabled=s.status!=='recording'||working;$('speak').disabled=!s.answers.length||['transcribing','thinking'].includes(s.stage);$('language').disabled=active;$('target').disabled=active;$('badge').textContent=({loading:'Model starting',idle:'Ready',recording:'● Recording',transcribing:'Transcribing',thinking:'Analyzing context',ready:'Choose an answer',speaking:'Playing audio',error:'Error',clarifying:'Choose a context'})[s.stage]||s.stage;$('badge').className='badge'+(s.model_status==='ready'?' active':'');$('error').textContent=[s.error,s.hardware_error&&'Knob: '+s.hardware_error].filter(Boolean).join('\n');
+async function refresh(){try{const s=await(await fetch('/api/state')).json();const newChat=currentChatId!==null&&currentChatId!==s.chat_id;if(newChat)resetChatUi();currentChatId=s.chat_id;updateStorageControls(s);if(!newChat)window.updateDictionarySuggestions?.(s);const active=['starting','recording','stopping'].includes(s.status),working=['transcribing','thinking','speaking'].includes(s.stage);$('start').disabled=active||s.model_status!=='ready';$('stop').disabled=!active||s.status==='stopping';$('analyze').disabled=s.status!=='recording'||working;$('speak').disabled=!s.answers.length||['transcribing','thinking'].includes(s.stage);$('language').disabled=active;$('target').disabled=active;$('badge').textContent=({loading:'Model starting',idle:'Ready',recording:'● Recording',transcribing:'Transcribing',thinking:'Analyzing context',ready:'Choose an answer',speaking:'Playing audio',error:'Error',clarifying:'Choose a context'})[s.stage]||s.stage;$('badge').className='badge'+(s.model_status==='ready'?' active':'');$('error').textContent=[s.error,s.hardware_error&&'Knob: '+s.hardware_error].filter(Boolean).join('\n');
 if(s.level){const db=20*Math.log10(Math.max(s.level.rms,1e-6));$('level').textContent=Math.round(db)+' dBFS';$('fill').style.width=Math.max(0,Math.min(100,(db+65)/65*100))+'%';$('elapsed').textContent=elapsed(s.level.elapsed_ms)}
 $('contextMode').value=s.context_mode||'sentences';$('contextMode').disabled=working||Boolean(s.pending_context);
 $('listener').textContent=active?'● Listening continuously':'Listening paused';

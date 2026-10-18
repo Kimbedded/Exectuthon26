@@ -27,8 +27,9 @@ class ContextFlowTests(unittest.TestCase):
    self.assertEqual(d.STATE['event']['transcript'],'Check the ground.')
    with self.assertRaises(ValueError):d.choose_context(0,'old-snapshot')
    d.choose_context(0,'1:1')
-   self.assertEqual(api.call_args.args[1]['transcript'],'Check the ground.')
-   self.assertIn('전기 회로',api.call_args.args[1]['context'])
+   interpret_calls=[call for call in api.call_args_list if call.args[0]=='interpret/button']
+   self.assertEqual(interpret_calls[-1].args[1]['transcript'],'Check the ground.')
+   self.assertIn('전기 회로',interpret_calls[-1].args[1]['context'])
    self.assertEqual(d.STATE['event']['selected_context'],'전기 회로')
  def test_old_generation_cannot_replace_new_snapshot(self):
   d.STATE['generation']=4

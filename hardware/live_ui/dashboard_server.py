@@ -240,6 +240,35 @@ def start(data):
         STATE.update(words=[],word_source='',word_notice='',status='starting',level=None,live=None,event=None,history=[],error=None,session=STATE['session']+1,generation=STATE['generation']+1,answers=[],selected=0,pending_context=None,context_decision=None,snapshot=None,snapshot_id=None,target_language=target,source_language=language)
         stage('recording')
 
+def reset_chat_state():
+    global RECALL,LIVE_SENTENCES,LIVE_REVISION,LIVE_STREAM_ID,SPEECH_ID
+    preserved = {
+        key: STATE.get(key)
+        for key in ('chat_archive', 'vocabulary', 'vocabulary_error',
+                    'context_mode', 'source_language', 'target_language',
+                    'model_status', 'hardware', 'hardware_error')
+    }
+    STATE.update(
+        chat_id=uuid.uuid4().hex, chat_mode=None, chat_messages=[], recall=None,
+        status='idle', stage='idle', level=None, event=None, history=[], logs=[],
+        error=None, words=[], word_source='', word_context='', word_index=0,
+        word_notice='', answers=[], selected=0, live=None, snapshot=None,
+        snapshot_id=None, context_decision=None, pending_context=None,
+        frozen_sentence_context='', requested_context_mode=preserved['context_mode'],
+        tts=None, generation=STATE.get('generation', 0) + 1,
+    )
+    STATE.update(preserved)
+    RECALL=RecallTracker()
+    LIVE_SENTENCES=SentenceLedger()
+    LIVE_STREAM_ID=uuid.uuid4().hex
+    LIVE_REVISION+=1
+    SPEECH_ID+=1
+    if HARDWARE:
+        HARDWARE.clear_recall()
+    if SPEECH is not None and SPEECH.poll() is None:
+        SPEECH.terminate()
+
+
 def new_chat():
     global RECALL,LIVE_SENTENCES,LIVE_REVISION,LIVE_STREAM_ID,SPEECH_ID
     with LOCK:
@@ -250,11 +279,7 @@ def new_chat():
         # Stop and start are ordered on the board stdin; stop joins the old audio
         # worker before start creates an empty PCM ring for the new chat.
         send({'action':'stop'})
-        STATE.update(chat_id=uuid.uuid4().hex,chat_mode=None,chat_messages=[],recall=None,status='idle',frozen_sentence_context='',requested_context_mode=STATE['context_mode'])
-        if HARDWARE:HARDWARE.clear_recall()
-        RECALL=RecallTracker();LIVE_SENTENCES=SentenceLedger();LIVE_STREAM_ID=uuid.uuid4().hex;LIVE_REVISION+=1
-        SPEECH_ID+=1
-        if SPEECH is not None and SPEECH.poll() is None:SPEECH.terminate()
+        reset_chat_state()
         start({'language':STATE['source_language'],'target_language':STATE['target_language']})
         LIVE_CHANGED.notify_all()
 
