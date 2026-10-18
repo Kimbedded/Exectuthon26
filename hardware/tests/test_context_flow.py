@@ -36,4 +36,31 @@ class ContextFlowTests(unittest.TestCase):
   with patch.object(d,'api_request',return_value={'answers':[]}) as api:
    d.translate_snapshot({'transcript':'old'},{'context':'','transcript':'old'},{},1,3)
   self.assertIsNone(d.STATE['event'])
+ def test_broad_chat_category_does_not_turn_failed_analysis_into_translation(self):
+  row={'transcript':'There is too much play.','status':'transcribed','elapsed_ms':30000}
+  decision={'needs_clarification':True,'topic':None,'evidence':None,
+      'question':'Which context?','options':['Technical','Everyday'],
+      'decision_method':'broad_context_fallback'}
+  with patch.object(d,'api_request',return_value=decision) as api:
+   with d.LOCK:d.process_snapshot(row)
+  self.assertEqual([call.args[0] for call in api.call_args_list],['context/resolve'])
+  self.assertEqual(d.STATE['chat_mode'],'Professional')
+  self.assertFalse(d.STATE['answers'])
+  self.assertIsNone(d.STATE['event'].get('translation'))
+  self.assertEqual(d.STATE['stage'],'error')
+  self.assertIn('one more sentence',d.STATE['error'])
+  with self.assertRaises(ValueError):d.save_current_translation()
+ def test_completed_snapshot_context_reaches_both_resolution_and_translation(self):
+  row={'transcript':'This electrical circuit has intermittent voltage. Check the ground.',
+      'frozen_sentence_context':'We are inspecting soil at the construction site.'}
+  decision={'needs_clarification':False,'topic':'Electrical grounding','evidence':'electrical circuit','options':[]}
+  result={'source':'Check the ground.','translation':'접지를 확인하세요.','answers':[]}
+  with patch.object(d,'api_request',side_effect=[decision,result,{'terms':[]}]) as api, patch.object(d,'schedule_word'):
+   with d.LOCK:d.process_snapshot(row)
+  for call in api.call_args_list[:2]:
+   self.assertEqual(call.args[1]['transcript'],'Check the ground.')
+   self.assertIn('electrical circuit',call.args[1]['context'])
+   self.assertNotIn('construction',call.args[1]['context'])
+  self.assertNotIn('Professional',api.call_args_list[0].args[1]['context'])
+  self.assertIn('Professional',api.call_args_list[1].args[1]['context'])
 if __name__=='__main__':unittest.main()

@@ -45,15 +45,12 @@ def resolve_context(transcript, context='', endpoint=None):
     if choice.get('finish_reason')!='length':
         try:
             body=json.loads(choice['message']['content'])
-            # Some Qwen responses mix the two branches. Only a real quote from prior
-            # context permits recovering the resolved branch; never assume a topic.
-            if (isinstance(body,dict) and isinstance(body.get('topic'),str) and body['topic'].strip()
-                and isinstance(body.get('evidence'),str) and body['evidence'].strip()
-                and previous and body['evidence'] in previous):
-                decision=validate_decision({**body,'options':[]},selected['target'],previous)
-                decision['decision_method']='qwen_context_quote'
-            elif isinstance(body,dict) and body.get('options'):
-                proposed=validate_decision(body,selected['target'],previous)
+            # Honor either valid branch. Do not silently delete a model's
+            # clarification options to manufacture a resolved meaning.
+            proposed=validate_decision(body,selected['target'],previous)
+            if not proposed['needs_clarification']:
+                decision=proposed;decision['decision_method']='qwen_context_quote'
+            else:
                 options=proposed['options']
                 if (not any(re.search(r'[\u4e00-\u9fff]',x) or x.endswith('하세요.') for x in options)
                     and SequenceMatcher(None,*options).ratio()<.7):

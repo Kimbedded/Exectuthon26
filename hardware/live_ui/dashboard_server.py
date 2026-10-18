@@ -148,15 +148,19 @@ def process_snapshot(row):
     if not mode:
         STATE['pending_context']={'kind':'chat_mode','snapshot_id':STATE['snapshot_id'],'question':'What kind of conversation is this?','options':['Casual · everyday conversation','Professional · work or technical conversation']}
         stage('clarifying');return
-    payload['context']+='\nChat category selected by the user (keep for this chat): '+mode
     def run():
         try:
             decision=api_request('context/resolve',payload)
-            if decision.get('decision_method')=='broad_context_fallback':
-                decision={**decision,'needs_clarification':False,'topic':mode,'options':[],'evidence':'','decision_method':'user_chat_category'}
             with LOCK:
                 if CLOSING or session!=STATE['session'] or generation!=STATE['generation']:return
                 STATE['context_decision']=decision
+                if decision.get('decision_method')=='broad_context_fallback':
+                    # Casual/Professional is a conversation preference, not a
+                    # resolved word sense. Do not turn a failed analysis into a
+                    # confident translation using only that category.
+                    STATE['pending_context']=None
+                    STATE['error']='The intended meaning is still unclear. Say one more sentence explaining the situation, then analyze again.'
+                    stage('error');return
                 if decision['needs_clarification']:
                     if len(decision['options'])!=2 or len(set(decision['options']))!=2:raise ValueError('Two distinct contexts are required')
                     STATE['pending_context']={**decision,'snapshot_id':STATE['snapshot_id']}
@@ -171,6 +175,9 @@ def process_snapshot(row):
 def translate_snapshot(row,payload,decision,session,generation,selection=None):
     # The original frozen transcript stays untouched, regardless of newer LIVE events.
     context=payload.get('context','')
+    # Keep chat preference separate from the quoted conversation used to infer
+    # a sense. A resolver must not cite "Professional" as spoken evidence.
+    if STATE.get('chat_mode'):context+='\nChat category selected by the user (keep for this chat): '+STATE['chat_mode']
     if selection:context+='\nThe user explicitly selected this context: '+selection
     elif decision.get('topic'):context+='\nSupported topic: '+decision['topic']+'\nEvidence: '+decision.get('evidence','')
     tick=time.perf_counter();result=api_request('interpret/button',{**payload,'context':context})
@@ -195,7 +202,6 @@ def choose_context(index,snapshot_id):
             STATE['pending_context']=None;process_snapshot(dict(STATE['event']));return
         row=dict(STATE['event']);session=STATE['session'];generation=STATE['generation']
         payload={**sentence_request(row,row.get('context_mode','sentences')),'source_language':STATE['source_language'],'target_language':STATE['target_language'],'elapsed_ms':row.get('elapsed_ms')}
-        payload['context']+='\nChat category selected by the user (keep for this chat): '+str(STATE.get('chat_mode') or '')
         selection=pending['options'][index]
         STATE['event']={**row,'selected_context':selection}
         payload['context_selection']=pending.get('option_contexts',pending['options'])[index]

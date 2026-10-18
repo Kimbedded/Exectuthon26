@@ -41,11 +41,21 @@ class SentenceLedgerTests(unittest.TestCase):
   view=ledger.update('A later sentence.',start_ms=2000,end_ms=4000)
   self.assertEqual(view['confirmed_sentences'],['First sentence.','A later sentence.'])
  def test_model_context_uses_at_most_five_sentences_including_source(self):
-  row={'transcript':'Old raw audio. Latest sentence.', 'frozen_sentence_context':'One. Two. Three. Four. Five. Six.'}
+  row={'transcript':'One. Two. Three. Four. Five. Six. Latest sentence.', 'frozen_sentence_context':'Older unrelated topic.'}
   request=sentence_request(row)
   self.assertEqual(request['transcript'],'Latest sentence.')
   self.assertEqual(request['context'],'Three. Four. Five. Six.')
   self.assertEqual(sentence_request(row,'time'),{'transcript':row['transcript'],'context':''})
+ def test_frozen_decode_keeps_newer_context_instead_of_stale_live_topic(self):
+  row={'transcript':'This electrical circuit has intermittent voltage. Check the ground.',
+       'frozen_sentence_context':'We are inspecting soil at the construction site.'}
+  request=sentence_request(row)
+  self.assertEqual(request,{'transcript':'Check the ground.',
+      'context':'This electrical circuit has intermittent voltage.'})
+ def test_nearest_context_preserves_negation_and_units(self):
+  request=sentence_request({'transcript':'Do not apply more than 5 V. Check the lead.',
+      'frozen_sentence_context':'Apply 50 V to the old setup.'})
+  self.assertEqual(request['context'],'Do not apply more than 5 V.')
  def test_sentence_context_retains_earlier_speech_after_audio_window_moves(self):
   request=sentence_request({'transcript':'What about now?','frozen_sentence_context':'Earlier topic. More detail. What about now?'})
   self.assertEqual(request['context'],'Earlier topic. More detail.')

@@ -20,7 +20,8 @@ def sentence_units(text):
     units=[];start=0
     for match in re.finditer(r'''[.!?。！？]+["'”’)]*(?=\s|$)''',text):
         prefix=text[:match.end()].rstrip('"\'”’)')
-        if match.group()[0]=='.' and (re.search(r'\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|e\.g|i\.e)\.$',prefix,re.I) or re.search(r'\b[A-Z]\.$',prefix)):continue
+        initial=re.search(r'\b[A-Z]\.$',prefix) and not re.search(r'\d\s+[A-Z]\.$',prefix)
+        if match.group()[0]=='.' and (re.search(r'\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|e\.g|i\.e)\.$',prefix,re.I) or initial):continue
         value=text[start:match.end()].strip()
         if value:units.append((value,match.end(),True))
         start=match.end()
@@ -93,6 +94,9 @@ def sentence_request(row, mode='sentences'):
     units=sentence_units(text)
     if not units:return {'transcript':text,'context':''}
     source=units[-1][0]
-    history=sentence_units(row.get('frozen_sentence_context','')) or units[:-1]
+    # The completed frozen decode may contain newer context than the live ledger
+    # captured at button press. Do not replace those nearby sentences with an
+    # older topic. The ledger still supplies context for a one-sentence window.
+    history=units[:-1] or sentence_units(row.get('frozen_sentence_context',''))
     if history and similar(history[-1][0],source):history=history[:-1]
     return {'transcript':source,'context':' '.join(x[0] for x in history[-4:])}

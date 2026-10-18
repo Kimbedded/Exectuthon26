@@ -5,7 +5,8 @@
     const regex=/[.!?。！？]+["'”’)]*(?=\s|$)/g;let match;
     while((match=regex.exec(value))){
       const prefix=value.slice(0,regex.lastIndex).replace(/["'”’)]*$/,'');
-      if(match[0][0]==='.' && (/\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|e\.g|i\.e)\.$/i.test(prefix)||/\b[A-Z]\.$/.test(prefix)))continue;
+      const initial=/\b[A-Z]\.$/.test(prefix)&&!/\d\s+[A-Z]\.$/.test(prefix);
+      if(match[0][0]==='.' && (/\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|e\.g|i\.e)\.$/i.test(prefix)||initial))continue;
       ends.push(regex.lastIndex);
     }
     let start=ends.length?(ends[ends.length-1]===value.length?(ends[ends.length-2]||0):ends[ends.length-1]):0;

@@ -4,6 +4,10 @@ from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import translate_sentence as m
 class SelectionTests(unittest.TestCase):
+ def test_sentence_after_a_voltage_limit_does_not_replace_its_context(self):
+  result=m.select_last_sentence('Do not apply more than 5 V. Check the lead.')
+  self.assertEqual(result['target'],'Check the lead.')
+  self.assertEqual(result['context'],'Do not apply more than 5 V.')
  def test_explicit_user_selection_overrides_earlier_topic_but_retains_history(self):
   body={'translation':'바닥을 확인하세요.','literal':'바닥을 확인하세요.','explanation':'바닥 상태를 점검합니다.'}
   stream=io.BytesIO(('data: '+json.dumps({'choices':[{'delta':{'content':json.dumps(body)},'finish_reason':'stop'}]})+'\ndata: [DONE]\n').encode())
@@ -14,4 +18,12 @@ class SelectionTests(unittest.TestCase):
   self.assertIn('physical floor',data['TERM_HINTS']['ground'])
   self.assertEqual(data['CONTEXT']['preceding_sentences'],'This electrical circuit needs grounding.')
   self.assertIn('physical floor',data['CONTEXT']['user_selected_context'])
+ def test_conflicting_context_does_not_force_an_electrical_hint(self):
+  body={'translation':'번역','literal':'직역','explanation':'설명'}
+  stream=io.BytesIO(('data: '+json.dumps({'choices':[{'delta':{'content':json.dumps(body)},'finish_reason':'stop'}]})+'\ndata: [DONE]\n').encode())
+  with patch.object(m.urllib.request,'urlopen',return_value=stream) as http:
+   result=m.translate('Check the ground.',context='The electrical circuit is outside on the floor.',include_choices=True)
+  self.assertTrue(result['valid'])
+  sent=json.loads(http.call_args.args[0].data)
+  self.assertEqual(json.loads(sent['messages'][1]['content'])['TERM_HINTS'],{})
 if __name__=='__main__':unittest.main()
