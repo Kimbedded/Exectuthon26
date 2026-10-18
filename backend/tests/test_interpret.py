@@ -5,13 +5,14 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import database
 import idk_client
 import main
 import translate_sentence
+import model_transport
 from fastapi.testclient import TestClient
 
 
@@ -81,6 +82,25 @@ class InterpretAPITests(unittest.TestCase):
 
 
 class ModelClientTests(unittest.TestCase):
+    def test_transient_gateway_is_retried(self):
+        response = io.BytesIO(b"ok")
+        calls = iter([response])
+        failed = True
+
+        def opener(request, timeout):
+            nonlocal failed
+            if failed:
+                failed = False
+                raise HTTPError("http://model.test", 502, "Bad Gateway", {}, io.BytesIO())
+            return next(calls)
+
+        with patch.object(model_transport.time, 'sleep') as pause:
+            result = model_transport.open_model_request(
+                lambda: object(), opener=opener
+            )
+        self.assertIs(result, response)
+        pause.assert_called_once_with(0.25)
+
     def test_name_normalization_and_environment_endpoint(self):
         with patch.dict('os.environ', {'IDK_MODEL_ENDPOINT': 'http://model.test:18181/v1'}):
             with patch.object(idk_client, 'translate', return_value={'valid': True, 'result': RESULT}) as call:

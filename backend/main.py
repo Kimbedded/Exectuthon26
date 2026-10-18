@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import json
+import os
 from urllib.error import URLError
 
 from fastapi import FastAPI, HTTPException, Query
@@ -8,10 +9,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from database import init_db, list_expressions, save_expression
 from dictionary_api import router as dictionary_router
 from dictionary_store import init_dictionary
-from idk_client import interpret as interpret_ai
 from schemas import SavedTranslation, TranslationResult, EnrichedTranslationResult, ButtonTranslationResult
 from context_resolution import resolve_context
 from translation_store import init_translation_store, list_translations, save_translation
+from idk_client import interpret as interpret_ai
+from model_transport import model_endpoint_ready
 
 
 @asynccontextmanager
@@ -58,7 +60,14 @@ class SavedExpression(SaveExpressionRequest):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    endpoint = os.environ.get("IDK_MODEL_ENDPOINT", "http://127.0.0.1:18181/v1")
+    try:
+        ready = model_endpoint_ready(endpoint, "unsloth/Qwen3.5-2B-GGUF:Q4_0")
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        ready = False
+    if not ready:
+        raise HTTPException(status_code=503, detail="Model upstream is not ready")
+    return {"status": "ok", "model": "unsloth/Qwen3.5-2B-GGUF:Q4_0"}
 
 
 @app.post('/interpret/button', response_model=ButtonTranslationResult)

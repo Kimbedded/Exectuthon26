@@ -17,5 +17,7 @@ Restart FastAPI and the dashboard together so port 8010 is always refreshed with
 ```
 
 The script uses the repository `.venv`, starts FastAPI on `127.0.0.1:8000`, and starts the
-dashboard with its existing command on `127.0.0.1:8010`. Logs are written to
-`/tmp/exectuthon26-fastapi.log` and `/tmp/exectuthon26-dashboard.log`.
+dashboard with its existing command on `127.0.0.1:8010`. FastAPI `/health` is dependency-aware:
+it returns 200 only when the ADB-forwarded GenieX model on `127.0.0.1:18181` advertises the
+configured Qwen model. Logs are written to `/tmp/exectuthon26-fastapi.log` and
+`/tmp/exectuthon26-dashboard.log`.

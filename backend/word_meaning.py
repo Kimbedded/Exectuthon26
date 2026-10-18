@@ -1,6 +1,7 @@
 """Contextual single-word lookup using the frozen Qwen model."""
 import json, os, re, urllib.request
 from idk_client import _INFERENCE_LOCK
+from model_transport import open_model_request
 from translate_sentence import MODEL
 
 WORD = re.compile(r"[^\W_]+(?:['’\-][^\W_]+)*", re.UNICODE)
@@ -43,7 +44,7 @@ def resolve_word(source, index, context='', target_language='ko'):
     payload={'model':MODEL,'messages':[{'role':'system','content':prompt},{'role':'user','content':data}], 'temperature':0,'top_k':1,'enable_think':False,'max_tokens':48,'stream':False}
     req=urllib.request.Request(os.environ.get('IDK_MODEL_ENDPOINT','http://127.0.0.1:18181/v1').rstrip('/')+'/chat/completions',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
     with _INFERENCE_LOCK:
-        with urllib.request.urlopen(req,timeout=180) as response:result=json.load(response)
+        with open_model_request(lambda: req,timeout=180,opener=urllib.request.urlopen) as response:result=json.load(response)
     choice=result['choices'][0];meaning=choice['message']['content'].strip().strip('\"')
     if choice.get('finish_reason')=='length' or not meaning or len(meaning)>240 or 'UNKNOWN' in meaning.upper():
         return {**token,'meaning':None,'status':'unresolved'}

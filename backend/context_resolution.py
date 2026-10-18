@@ -2,6 +2,7 @@
 import json,os,urllib.request,re
 from difflib import SequenceMatcher
 from idk_client import _INFERENCE_LOCK
+from model_transport import open_model_request
 from translate_sentence import MODEL, select_last_sentence
 from context_catalog import catalog_decision, broad_clarification
 
@@ -38,7 +39,7 @@ def resolve_context(transcript, context='', endpoint=None):
              'temperature':0,'top_k':1,'enable_think':False,'max_tokens':256,'stream':False}
     request=urllib.request.Request((endpoint or os.environ.get('IDK_MODEL_ENDPOINT','http://127.0.0.1:18181/v1')).rstrip('/')+'/chat/completions',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
     with _INFERENCE_LOCK:
-        with urllib.request.urlopen(request,timeout=180) as response:raw=json.load(response)
+        with open_model_request(lambda: request,timeout=180,opener=urllib.request.urlopen) as response:raw=json.load(response)
     choice=raw['choices'][0]
     decision=None
     if choice.get('finish_reason')!='length':
