@@ -3,7 +3,7 @@ import re,zlib
 
 def quality(text,avg_logprob,min_margin,truncated,clipped_fraction=0.,no_speech_probability=0.):
     reasons=[]
-    caption=bool(re.fullmatch(r'\s*[\[(].*(?:music|applause|laughter|silence|birds?|chirping|noise|wind|footsteps|음악|박수|웃음|무음|새소리|잡음).*?[\])]\s*',text,re.I))
+    caption=bool(re.fullmatch(r'\s*[\[(].*(?:blank[_ ]audio|inaudible|music|applause|laughter|silence|birds?|chirping|noise|wind|footsteps|음악|박수|웃음|무음|새소리|잡음).*?[\])]\s*',text,re.I))
     silent=not text.strip() or caption or (no_speech_probability>.6 and avg_logprob is not None and avg_logprob< -1.)
     ratio=len(text.encode())/max(1,len(zlib.compress(text.encode())))
     if avg_logprob is not None and avg_logprob< -1.:reasons.append('low_average_logprob')

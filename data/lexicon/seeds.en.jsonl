@@ -1,0 +1,100 @@
+{"id": "exp-001", "expression": "go nuts", "family": "nut", "coverage_group": "slang_idiom"}
+{"id": "exp-002", "expression": "nuts", "family": "nut", "coverage_group": "slang_idiom"}
+{"id": "exp-003", "expression": "hang out", "family": "hang out", "coverage_group": "slang_idiom"}
+{"id": "exp-004", "expression": "hit the sack", "family": "hit the sack", "coverage_group": "slang_idiom"}
+{"id": "exp-005", "expression": "piece of cake", "family": "piece of cake", "coverage_group": "slang_idiom"}
+{"id": "exp-006", "expression": "break a leg", "family": "break a leg", "coverage_group": "slang_idiom"}
+{"id": "exp-007", "expression": "spill the beans", "family": "spill the beans", "coverage_group": "slang_idiom"}
+{"id": "exp-008", "expression": "under the weather", "family": "under the weather", "coverage_group": "slang_idiom"}
+{"id": "exp-009", "expression": "on the same page", "family": "on the same page", "coverage_group": "slang_idiom"}
+{"id": "exp-010", "expression": "touch base", "family": "touch base", "coverage_group": "slang_idiom"}
+{"id": "exp-011", "expression": "call it a day", "family": "call it a day", "coverage_group": "slang_idiom"}
+{"id": "exp-012", "expression": "cut corners", "family": "cut corners", "coverage_group": "slang_idiom"}
+{"id": "exp-013", "expression": "out of the blue", "family": "out of the blue", "coverage_group": "slang_idiom"}
+{"id": "exp-014", "expression": "no big deal", "family": "no big deal", "coverage_group": "slang_idiom"}
+{"id": "exp-015", "expression": "my bad", "family": "my bad", "coverage_group": "slang_idiom"}
+{"id": "exp-016", "expression": "you bet", "family": "you bet", "coverage_group": "slang_idiom"}
+{"id": "exp-017", "expression": "fair enough", "family": "fair enough", "coverage_group": "slang_idiom"}
+{"id": "exp-018", "expression": "give me a hand", "family": "give me a hand", "coverage_group": "slang_idiom"}
+{"id": "exp-019", "expression": "pull my leg", "family": "pull my leg", "coverage_group": "slang_idiom"}
+{"id": "exp-020", "expression": "hit the nail on the head", "family": "hit the nail on the head", "coverage_group": "slang_idiom"}
+{"id": "exp-021", "expression": "that tracks", "family": "that tracks", "coverage_group": "slang_idiom"}
+{"id": "exp-022", "expression": "low-key", "family": "low-key", "coverage_group": "slang_idiom"}
+{"id": "exp-023", "expression": "ghost someone", "family": "ghost someone", "coverage_group": "slang_idiom"}
+{"id": "exp-024", "expression": "salty", "family": "salty", "coverage_group": "slang_idiom"}
+{"id": "exp-025", "expression": "sick", "family": "sick", "coverage_group": "slang_idiom"}
+{"id": "exp-026", "expression": "nut", "family": "nut", "coverage_group": "everyday_polysemy"}
+{"id": "exp-027", "expression": "ground", "family": "ground", "coverage_group": "everyday_polysemy"}
+{"id": "exp-028", "expression": "port", "family": "port", "coverage_group": "everyday_polysemy"}
+{"id": "exp-029", "expression": "bank", "family": "bank", "coverage_group": "everyday_polysemy"}
+{"id": "exp-030", "expression": "charge", "family": "charge", "coverage_group": "everyday_polysemy"}
+{"id": "exp-031", "expression": "current", "family": "current", "coverage_group": "everyday_polysemy"}
+{"id": "exp-032", "expression": "resistance", "family": "resistance", "coverage_group": "everyday_polysemy"}
+{"id": "exp-033", "expression": "power", "family": "power", "coverage_group": "everyday_polysemy"}
+{"id": "exp-034", "expression": "drive", "family": "drive", "coverage_group": "everyday_polysemy"}
+{"id": "exp-035", "expression": "cell", "family": "cell", "coverage_group": "everyday_polysemy"}
+{"id": "exp-036", "expression": "board", "family": "board", "coverage_group": "everyday_polysemy"}
+{"id": "exp-037", "expression": "terminal", "family": "terminal", "coverage_group": "everyday_polysemy"}
+{"id": "exp-038", "expression": "lead", "family": "lead", "coverage_group": "everyday_polysemy"}
+{"id": "exp-039", "expression": "short", "family": "short", "coverage_group": "everyday_polysemy"}
+{"id": "exp-040", "expression": "open", "family": "open", "coverage_group": "everyday_polysemy"}
+{"id": "exp-041", "expression": "close", "family": "close", "coverage_group": "everyday_polysemy"}
+{"id": "exp-042", "expression": "light", "family": "light", "coverage_group": "everyday_polysemy"}
+{"id": "exp-043", "expression": "right", "family": "right", "coverage_group": "everyday_polysemy"}
+{"id": "exp-044", "expression": "fine", "family": "fine", "coverage_group": "everyday_polysemy"}
+{"id": "exp-045", "expression": "mean", "family": "mean", "coverage_group": "everyday_polysemy"}
+{"id": "exp-046", "expression": "issue", "family": "issue", "coverage_group": "everyday_polysemy"}
+{"id": "exp-047", "expression": "run", "family": "run", "coverage_group": "everyday_polysemy"}
+{"id": "exp-048", "expression": "crash", "family": "crash", "coverage_group": "everyday_polysemy"}
+{"id": "exp-049", "expression": "hang", "family": "hang", "coverage_group": "everyday_polysemy"}
+{"id": "exp-050", "expression": "hot", "family": "hot", "coverage_group": "everyday_polysemy"}
+{"id": "exp-051", "expression": "grounding", "family": "ground", "coverage_group": "electrical_mechanical"}
+{"id": "exp-052", "expression": "short circuit", "family": "short", "coverage_group": "electrical_mechanical"}
+{"id": "exp-053", "expression": "open circuit", "family": "open", "coverage_group": "electrical_mechanical"}
+{"id": "exp-054", "expression": "voltage drop", "family": "voltage drop", "coverage_group": "electrical_mechanical"}
+{"id": "exp-055", "expression": "current draw", "family": "current", "coverage_group": "electrical_mechanical"}
+{"id": "exp-056", "expression": "power supply", "family": "power", "coverage_group": "electrical_mechanical"}
+{"id": "exp-057", "expression": "pull-up resistor", "family": "pull-up resistor", "coverage_group": "electrical_mechanical"}
+{"id": "exp-058", "expression": "floating pin", "family": "floating pin", "coverage_group": "electrical_mechanical"}
+{"id": "exp-059", "expression": "noise", "family": "noise", "coverage_group": "electrical_mechanical"}
+{"id": "exp-060", "expression": "signal", "family": "signal", "coverage_group": "electrical_mechanical"}
+{"id": "exp-061", "expression": "gain", "family": "gain", "coverage_group": "electrical_mechanical"}
+{"id": "exp-062", "expression": "bias", "family": "bias", "coverage_group": "electrical_mechanical"}
+{"id": "exp-063", "expression": "load", "family": "load", "coverage_group": "electrical_mechanical"}
+{"id": "exp-064", "expression": "impedance", "family": "impedance", "coverage_group": "electrical_mechanical"}
+{"id": "exp-065", "expression": "continuity", "family": "continuity", "coverage_group": "electrical_mechanical"}
+{"id": "exp-066", "expression": "tolerance", "family": "tolerance", "coverage_group": "electrical_mechanical"}
+{"id": "exp-067", "expression": "torque", "family": "torque", "coverage_group": "electrical_mechanical"}
+{"id": "exp-068", "expression": "thread", "family": "thread", "coverage_group": "electrical_mechanical"}
+{"id": "exp-069", "expression": "pitch", "family": "pitch", "coverage_group": "electrical_mechanical"}
+{"id": "exp-070", "expression": "washer", "family": "washer", "coverage_group": "electrical_mechanical"}
+{"id": "exp-071", "expression": "bearing", "family": "bearing", "coverage_group": "electrical_mechanical"}
+{"id": "exp-072", "expression": "shaft", "family": "shaft", "coverage_group": "electrical_mechanical"}
+{"id": "exp-073", "expression": "clearance", "family": "clearance", "coverage_group": "electrical_mechanical"}
+{"id": "exp-074", "expression": "backlash", "family": "backlash", "coverage_group": "electrical_mechanical"}
+{"id": "exp-075", "expression": "tighten", "family": "tighten", "coverage_group": "electrical_mechanical"}
+{"id": "exp-076", "expression": "bug", "family": "bug", "coverage_group": "software_professional"}
+{"id": "exp-077", "expression": "patch", "family": "patch", "coverage_group": "software_professional"}
+{"id": "exp-078", "expression": "branch", "family": "branch", "coverage_group": "software_professional"}
+{"id": "exp-079", "expression": "commit", "family": "commit", "coverage_group": "software_professional"}
+{"id": "exp-080", "expression": "merge", "family": "merge", "coverage_group": "software_professional"}
+{"id": "exp-081", "expression": "fork", "family": "fork", "coverage_group": "software_professional"}
+{"id": "exp-082", "expression": "thread-safe", "family": "thread", "coverage_group": "software_professional"}
+{"id": "exp-083", "expression": "race condition", "family": "race condition", "coverage_group": "software_professional"}
+{"id": "exp-084", "expression": "deadlock", "family": "deadlock", "coverage_group": "software_professional"}
+{"id": "exp-085", "expression": "memory leak", "family": "memory leak", "coverage_group": "software_professional"}
+{"id": "exp-086", "expression": "stack", "family": "stack", "coverage_group": "software_professional"}
+{"id": "exp-087", "expression": "heap", "family": "heap", "coverage_group": "software_professional"}
+{"id": "exp-088", "expression": "cache", "family": "cache", "coverage_group": "software_professional"}
+{"id": "exp-089", "expression": "latency", "family": "latency", "coverage_group": "software_professional"}
+{"id": "exp-090", "expression": "throughput", "family": "throughput", "coverage_group": "software_professional"}
+{"id": "exp-091", "expression": "bottleneck", "family": "bottleneck", "coverage_group": "software_professional"}
+{"id": "exp-092", "expression": "endpoint", "family": "endpoint", "coverage_group": "software_professional"}
+{"id": "exp-093", "expression": "socket", "family": "socket", "coverage_group": "software_professional"}
+{"id": "exp-094", "expression": "timeout", "family": "timeout", "coverage_group": "software_professional"}
+{"id": "exp-095", "expression": "deploy", "family": "deploy", "coverage_group": "software_professional"}
+{"id": "exp-096", "expression": "rollback", "family": "rollback", "coverage_group": "software_professional"}
+{"id": "exp-097", "expression": "scope", "family": "scope", "coverage_group": "software_professional"}
+{"id": "exp-098", "expression": "bandwidth", "family": "bandwidth", "coverage_group": "software_professional"}
+{"id": "exp-099", "expression": "blocker", "family": "blocker", "coverage_group": "software_professional"}
+{"id": "exp-100", "expression": "ship it", "family": "ship", "coverage_group": "software_professional"}

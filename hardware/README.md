@@ -83,3 +83,26 @@ Sources used to verify the Bridge/matrix approach: [Arduino's VENTUNO Q local as
 Repeated short clicks during TTS interrupt the previous utterance and play the latest selected answer. Older player completion cannot reset the new player's state.
 
 Uncertain speech can show an original and an actual alternate ASR decoding beneath the transcript. Choose a candidate on the screen to retranslate it; the physical Knob still selects the three LLM answers. No correctness percentage is fabricated. Native Mac playback replacement and real-board ASR/candidate-to-LLM tests were executed. The alternate is not guaranteed to correct the original recognition.
+
+
+## Continuous listening and button-time context
+
+The dashboard starts listening automatically after model initialization. Whisper updates the live rolling transcript roughly every second; Qwen is not called for live updates. The audio buffer keeps up to the most recent 30 seconds. Pressing the hardware button or “지금 문맥으로 해석” copies the buffer immediately, before ASR/Qwen processing. Later audio cannot change that request. The UI separates LIVE from the frozen snapshot and shows the selected window range and the sentence to translate.
+
+The frozen transcript goes through `/context/resolve`. If its topic remains ambiguous, exactly two context choices are shown and translation/Save wait. Reviewed word senses cover ground, port and bank. Other cases use a validated Qwen decision; if no specific decision is reliable, the UI explicitly asks between broad professional/technical and everyday contexts. Both choices can be rejected by taking a new snapshot. This is conservative clarification behavior, not a calibrated model-confidence score.
+
+Rotate the knob to select a context candidate, then click to confirm. Outside the question state, a click analyzes the current window. TTS is available through the separate “선택 답변 듣기” control. Listening continues while a question is open and while translation is running. Pause listening before changing language, then resume. Explicit context selection takes priority over older topic evidence while preserving the original frozen transcript as reference.
+
+
+## Word-level transcript display
+
+Live ASR windows now refresh at a target one-second cadence (plus actual model execution time). The primary decoder emits completed word prefixes; a separate `/api/live` event stream forwards them without waiting for UI polling. The frozen button-time window still uses the original ASR quality/alternative path. Live decoding skips the secondary alternative branch to reduce latency. Partials are provisional and final ASR may correct them; token positions are text positions, not word-aligned audio timestamps.
+
+The view renders words as separate text spans while preserving original whitespace. Blue background marks the current live sentence; green marks the frozen sentence selected for interpretation. Backend-resolved SOURCE determines the frozen highlight once available, with a local sentence-boundary preview while it is pending. Duplicate ASR candidates are collapsed under “전사 후보 비교”. There is no artificial typewriter delay. Scrolling follows new text only when the reader is already near the bottom.
+
+
+## Stable sentence display and sentence context
+
+Live display now separates a bounded ledger of six closed sentences from a revisable tail. A completed sentence boundary matching across consecutive final ASR decodes closes the preceding prefix; silence, a shorter prefix or an unaligned partial decode does not erase readable text. This is recognition stability, not a guarantee that the text is correct. Oldest closed sentences expire by sentence count. ASR word corrections are still visible in the unfinished tail.
+
+The dashboard defaults to “최근 5문장 문맥”; “최근 30초 문맥” remains selectable. Sentence mode freezes the current sentence history at button press and sends up to four preceding sentences plus the freshly recognized target sentence to the existing API. Text history may extend before the 30-second audio window. The audio ring remains bounded at 30 seconds for current source verification. The snapshot card displays the model's actual sentence context; raw ASR remains available in candidate comparison/debug data. Mode changes apply to the next button request, not an already frozen question.

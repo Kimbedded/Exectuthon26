@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Launch the Arduino USB microphone rolling ASR and existing FastAPI translation."""
 import argparse
+import os
 from pathlib import Path
 import shlex
 import math
@@ -11,7 +12,7 @@ import urllib.request
 
 
 def stop_remote(serial,pid_file):
-    adb=shutil.which('adb') or '/opt/homebrew/bin/adb'
+    adb=os.environ.get('IDK_ADB') or shutil.which('adb') or '/opt/homebrew/bin/adb'
     code="""import os,signal,sys
 from pathlib import Path
 p=Path(sys.argv[1])
@@ -30,14 +31,14 @@ def main():
     parser.add_argument('--duration',type=float,default=0,help='0: continue until Ctrl-C')
     parser.add_argument('--language',default='en')
     parser.add_argument('--target-language',default='ko')
-    parser.add_argument('--interval',type=float,default=5)
+    parser.add_argument('--interval',type=float,default=1)
     parser.add_argument('--asr-only',action='store_true')
     parser.add_argument('--pid-file',default='/home/arduino/asr-executorch-test/live-mic/live-cli.pid')
     parser.add_argument('--button-ui',action='store_true')
     parser.add_argument('--resident',action='store_true')
     parser.add_argument('--pretty',action='store_true',help='Print concise live transcripts and translations')
     args=parser.parse_args()
-    adb=shutil.which('adb') or '/opt/homebrew/bin/adb';base=[adb,'-s',args.serial]
+    adb=os.environ.get('IDK_ADB') or shutil.which('adb') or '/opt/homebrew/bin/adb';base=[adb,'-s',args.serial]
     subprocess.run(base+['get-state'],check=True)
     if not args.asr_only:
         with urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5) as response:
@@ -46,6 +47,7 @@ def main():
     root='/home/arduino/asr-executorch-test'
     subprocess.run(base+['push',str(Path(__file__).with_name('live_board_audio.py')),root+'/live-mic/live_board_audio.py'],check=True)
     subprocess.run(base+['push',str(Path(__file__).with_name('asr_uncertainty.py')),root+'/live-mic/asr_uncertainty.py'],check=True)
+    subprocess.run(base+['push',str(Path(__file__).with_name('rolling_context.py')),root+'/live-mic/rolling_context.py'],check=True)
     command=['env','LD_LIBRARY_PATH='+root+'/qnn:/home/arduino/.local/share/geniex/qairt/htp-files:/home/arduino/.local/share/geniex',
         'ADSP_LIBRARY_PATH=/home/arduino/.local/share/geniex/qairt/htp-files','OMP_NUM_THREADS=4',root+'/venv/bin/python',
         root+'/live-mic/live_board_audio.py','--duration',str(args.duration),'--interval',str(args.interval),

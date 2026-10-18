@@ -8,6 +8,11 @@ class QualityTests(unittest.TestCase):
   self.assertEqual(r['status'],'needs_review');self.assertIsNone(r['confidence']);self.assertFalse(r['confidence_calibrated'])
  def test_caption_is_not_an_alternative_spoken_sentence(self):
   self.assertEqual(quality('(upbeat music)',-.1,2.,False)['status'],'non_speech')
+ def test_blank_audio_and_inaudible_markers(self):
+  for text in ['[BLANK_AUDIO]', ' [blank_audio] ', '[INAUDIBLE]']:
+   self.assertEqual(quality(text,-.1,2.,False)['status'],'non_speech')
+ def test_spoken_blank_word_is_not_a_marker(self):
+  self.assertEqual(quality('The audio is blank.',-.1,2.,False)['status'],'normal')
  def test_clear_text_without_flags(self):
   self.assertEqual(quality('hello',-.1,2.,False)['status'],'normal')
  def test_clipping_and_truncation_are_recorded(self):

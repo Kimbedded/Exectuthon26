@@ -10,6 +10,7 @@ from dictionary_api import router as dictionary_router
 from dictionary_store import init_dictionary
 from idk_client import interpret as interpret_ai
 from schemas import SavedTranslation, TranslationResult, EnrichedTranslationResult, ButtonTranslationResult
+from context_resolution import resolve_context
 from translation_store import init_translation_store, list_translations, save_translation
 
 
@@ -30,6 +31,7 @@ class InterpretRequest(BaseModel):
     elapsed_ms: int | None = Field(default=None, ge=0, strict=True)
     transcript: str = Field(min_length=1, max_length=3000)
     context: str = Field(default="", max_length=6000)
+    context_selection: str | None = Field(default=None, min_length=1, max_length=500)
     target_language: str = Field(
         default="Spanish", min_length=2, max_length=50
     )
@@ -69,6 +71,16 @@ def interpret_enriched(request: InterpretRequest):
     return _interpret(request, include_expressions=True)
 
 
+@app.post('/context/resolve')
+def context_resolve(request: InterpretRequest):
+    try:
+        return resolve_context(request.transcript, request.context)
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail='Context analysis timed out') from exc
+    except (ValueError, KeyError, IndexError, RuntimeError, URLError) as exc:
+        raise HTTPException(status_code=502, detail='Could not determine context; retry the snapshot') from exc
+
+
 @app.post("/interpret", response_model=TranslationResult)
 def interpret(request: InterpretRequest):
     return _interpret(request)
@@ -82,6 +94,7 @@ def _interpret(request: InterpretRequest, include_expressions: bool = False, inc
             target_language=request.target_language,
             source_language=request.source_language,
             elapsed_ms=request.elapsed_ms,
+            **({"context_selection":request.context_selection} if request.context_selection else {}),
             **({"include_expressions": True} if include_expressions else {}),
             **({"include_choices": True} if include_choices else {}),
         )
@@ -121,3 +134,19 @@ def get_translations(
     offset: int = Query(default=0, ge=0)
 ):
     return list_translations(limit=limit, offset=offset)
+
+class WordMeaningRequest(BaseModel):
+    source: str = Field(min_length=1, max_length=3000)
+    index: int = Field(ge=0, strict=True)
+    context: str = Field(default='', max_length=8000)
+    target_language: str = Field(default='ko', min_length=2, max_length=50)
+
+@app.post('/words/meaning')
+def word_meaning(request: WordMeaningRequest):
+    from word_meaning import resolve_word
+    try:
+        return resolve_word(**request.model_dump())
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except Exception as error:
+        raise HTTPException(status_code=502, detail='Word lookup failed') from error

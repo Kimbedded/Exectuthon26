@@ -32,12 +32,13 @@ def select_last_sentence(transcript):
         'target_start_char':start,'target_end_char':len(text),'boundary_status':status}
 
 
-def translate(transcript,endpoint='http://127.0.0.1:18181/v1',source_language='en',target_language='ko',elapsed_ms=None,context=None,include_expressions=False,include_choices=False):
+def translate(transcript,endpoint='http://127.0.0.1:18181/v1',source_language='en',target_language='ko',elapsed_ms=None,context=None,include_expressions=False,include_choices=False,context_selection=None):
     if not re.fullmatch(r'[a-z]{2,3}(?:-[A-Za-z0-9]+)*',source_language): raise ValueError('Invalid source language code')
     if not re.fullmatch(r'[a-z]{2,3}(?:-[A-Za-z0-9]+)*',target_language): raise ValueError('Invalid target language code')
     if elapsed_ms is not None and (type(elapsed_ms) is not int or elapsed_ms<0): raise ValueError('elapsed_ms must be a nonnegative integer or null')
     selected=select_last_sentence(transcript)
     conversation_context={'previous_turns':context or [],'preceding_sentences':selected['context']}
+    if context_selection:conversation_context['user_selected_context']=context_selection
     system=SYSTEM
     if include_expressions:
         system=('Translate SOURCE into TARGET_LANGUAGE, using CONTEXT only for word meanings. '
@@ -51,7 +52,8 @@ def translate(transcript,endpoint='http://127.0.0.1:18181/v1',source_language='e
             '{"context":"context label","translation":"alternative translation"} objects. '
             'All three keys translation, alternatives, expressions are required. No markdown.')
     if include_choices:
-        system=('Translate SOURCE into TARGET_LANGUAGE. Use CONTEXT only to resolve the intended meaning. '
+        system=('Translate SOURCE into TARGET_LANGUAGE. Read CONTEXT first to determine the intended word meanings. '
+            'CONTEXT is evidence, not text to translate. TERM_HINTS, when supplied, resolve ambiguous source terms. '
             'Preserve who does what. SOURCE may be an unfinished fragment: translate only what is present. '
             'Return a JSON object with exactly three STRING fields: translation, literal, explanation. '
             'translation is natural translation. literal is a more literal translation, also in TARGET_LANGUAGE. '
@@ -59,9 +61,18 @@ def translate(transcript,endpoint='http://127.0.0.1:18181/v1',source_language='e
             'Every field must be in TARGET_LANGUAGE, never copy English as the literal translation. '
             'Do not use arrays. Do not quote the source. No markdown. '
             'Example structure: {"translation":"...","literal":"...","explanation":"..."}')
+    term_hints={}
+    evidence=(context_selection if context_selection else json.dumps(conversation_context,ensure_ascii=False))+' '+selected['target']
+    if re.search(r'\bground(?:ing)?\b',selected['target'],re.I):
+        if re.search(r'\b(circuits?|electrical|voltage|pcb|wiring)\b',evidence,re.I):
+            term_hints['ground']='electrical ground connection; grounding (접지)'
+        elif re.search(r'\b(outside|outdoors|floor|dropped|soil)\b',evidence,re.I):
+            term_hints['ground']='physical floor or earth surface (바닥/땅)'
+    if term_hints:
+        system+=' For this request only, the word ground means '+term_hints['ground']+'. Use this meaning consistently in translation, literal and explanation.'
     payload={'model':MODEL,'messages':[{'role':'system','content':system},
         {'role':'user','content':json.dumps({'SOURCE_LANGUAGE':source_language,'TARGET_LANGUAGE':target_language,
-            'CONTEXT':conversation_context,'SOURCE':selected['target']},ensure_ascii=False)}],
+            'CONTEXT':conversation_context,'TERM_HINTS':term_hints,'SOURCE':selected['target']},ensure_ascii=False)}],
         'temperature':0,'top_k':1,'enable_think':False,'max_tokens':512 if include_expressions or include_choices else 256,'stream':True,'stream_options':{'include_usage':True}}
     request=urllib.request.Request(endpoint.rstrip('/')+'/chat/completions',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
     tick=time.perf_counter(); first=None; last=None; raw=''; usage=None; finish=None

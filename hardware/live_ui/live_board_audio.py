@@ -10,6 +10,7 @@ import threading
 import time
 import urllib.request
 import wave
+import re
 import sys
 from asr_uncertainty import quality
 
@@ -45,8 +46,8 @@ class ASR:
         token='<|'+language+'|>'
         if token not in self.tokenizer.get_vocab():raise ValueError('Unsupported language token')
         self.prefix=[self.tokenizer.convert_tokens_to_ids(token),self.tokenizer.convert_tokens_to_ids('<|transcribe|>'),self.tokenizer.convert_tokens_to_ids('<|notimestamps|>')]
-    def _decode(self,hidden,forced=None):
-        ids=[];scores=[];branches=[];cur=self.start;no_speech=0.
+    def _decode(self,hidden,forced=None,on_partial=None):
+        ids=[];scores=[];branches=[];cur=self.start;no_speech=0.;last_partial=""
         mask=torch.full((1,1,1,self.limit),-255.,dtype=torch.float32)
         for pos in range(self.limit):
             mask[0,0,0,pos]=0
@@ -65,21 +66,29 @@ class ASR:
                     if first<self.eos and second<self.eos and all(any(c.isalnum() for c in piece) for piece in pieces):
                         branches.append({'position':pos,'alternative_token':second,'margin':float(values[0]-values[1])})
             ids.append(cur)
+            if on_partial and pos>=len(self.prefix):
+                text=self.tokenizer.decode(ids,skip_special_tokens=True)
+                if cur!=self.eos:
+                    match=re.match(r'^(.*[\s.!?。！？])',text,re.S)
+                    text=match.group(1).strip() if match else ''
+                else:text=text.strip()
+                if text and text!=last_partial and not text.startswith(('[','(')):
+                    on_partial(text);last_partial=text
             if cur==self.eos:break
         return {'ids':ids,'text':self.tokenizer.decode(ids,skip_special_tokens=True).strip(),
             'average_logprob':sum(scores)/len(scores) if scores else None,
             'branches':branches,'no_speech':no_speech,'truncated':ids[-1]!=self.eos}
 
-    def transcribe(self,audio,clipped_fraction=0.):
+    def transcribe(self,audio,clipped_fraction=0.,on_partial=None,include_alternatives=True):
         tick=time.perf_counter()
         with torch.inference_mode():
             features=self.processor(audio,sampling_rate=RATE,return_tensors='pt').input_features.contiguous()
             hidden=self.model.run_method('encoder',[features])[0]
-            primary=self._decode(hidden)
+            primary=self._decode(hidden,on_partial=on_partial)
             margin=min((x['margin'] for x in primary['branches']),default=None)
             diagnostic=quality(primary['text'],primary['average_logprob'],margin,primary['truncated'],clipped_fraction,primary['no_speech'])
             alternatives=[]
-            if diagnostic['status']=='needs_review' and primary['branches']:
+            if include_alternatives and diagnostic['status']=='needs_review' and primary['branches']:
                 branch=min(primary['branches'],key=lambda x:x['margin'])
                 forced=primary['ids'][:branch['position']]+[branch['alternative_token']]
                 alternative=self._decode(hidden,forced)
@@ -138,7 +147,8 @@ def capture_session(a,asr,stop_event,trigger=None):
                 'recent_rms':float(np.sqrt(np.mean(recent*recent))),'peak':float(np.max(np.abs(audio))),
                 'clipped_fraction':float(np.mean(np.abs(audio)>=.999))}
             tick=time.perf_counter()
-            if row['recent_rms']<a.silence_rms:row['status']='low_level_skip'
+            if row['recent_rms']<a.silence_rms:
+                row.update(status='non_speech',transcript='',message='No speech detected.',asr_quality={'status':'non_speech','reasons':['low_audio_level']})
             else:
                 emit('PHASE',{'state':'transcribing'})
                 row.update(asr.transcribe(audio,clipped_fraction=row['clipped_fraction']));row['status']='transcribed'
@@ -151,6 +161,8 @@ def capture_session(a,asr,stop_event,trigger=None):
                             row['translation']=json.load(response);row['http_status']=response.status
                     except Exception as error:row['api_error']=repr(error)
                     row['api_seconds']=time.perf_counter()-started
+                if row['asr_quality']['status']=='non_speech':
+                    row.update(status='non_speech',message='No speech detected.',asr_alternatives=[])
                 previous=row.get('transcript')
             row['processing_seconds']=time.perf_counter()-tick
             rows.append(row)
@@ -166,6 +178,56 @@ def capture_session(a,asr,stop_event,trigger=None):
         try:capture.wait(timeout=3)
         except subprocess.TimeoutExpired:capture.kill();capture.wait()
         (a.output_dir/'session.json').write_text(json.dumps({'settings':vars(a)|{'output_dir':str(a.output_dir)},'rows':rows},ensure_ascii=False,indent=2)+'\n')
+        print('STOPPED',flush=True)
+
+def listen_session(a, asr, stop_event, control):
+    from queue import Empty
+    asr.set_language(a.language)
+    capture=subprocess.Popen(['arecord','-q','-D',a.device,'-t','raw','-f','S16_LE','-r',str(RATE),'-c','1'],stdout=subprocess.PIPE)
+    ended=threading.Event()
+    def receive():
+        last=0.
+        try:
+            while not stop_event.is_set():
+                chunk=capture.stdout.read(3200)
+                if not chunk:break
+                control.append(chunk)
+                if time.monotonic()-last>=.5:
+                    samples=np.frombuffer(chunk,dtype='<i2').astype(np.float32)/32768
+                    emit('LEVEL',{'elapsed_ms':control.snapshot()['window_end_ms'],'rms':float(np.sqrt(np.mean(samples*samples))),'peak':float(np.max(np.abs(samples)))})
+                    last=time.monotonic()
+        finally:ended.set()
+    threading.Thread(target=receive,daemon=True).start()
+    print('READY: continuously listening; button freezes the previous 30 seconds.',flush=True)
+    next_live=time.monotonic()+a.interval
+    try:
+        while not stop_event.is_set():
+            if ended.is_set():raise RuntimeError('Microphone disconnected or capture stopped')
+            try:sample=control.pending.get_nowait();requested=True
+            except Empty:
+                if time.monotonic()<next_live:time.sleep(.03);continue
+                sample=control.snapshot();requested=False
+            if not sample['pcm']:time.sleep(.05);continue
+            audio=np.frombuffer(sample.pop('pcm'),dtype='<i2').astype(np.float32)/32768
+            row={**sample,'capture_session_id':a.session_id,'elapsed_ms':sample['window_end_ms'],'rms':float(np.sqrt(np.mean(audio*audio))),
+                 'peak':float(np.max(np.abs(audio))),'clipped_fraction':float(np.mean(np.abs(audio)>=.999))}
+            cycle_started=time.monotonic()
+            if requested:emit('PHASE',{'state':'transcribing'})
+            # Inspect the complete frozen window: a quiet last two seconds must not discard earlier speech.
+            if row['rms']<a.silence_rms:
+                row.update(status='non_speech',transcript='',message='No speech detected.',asr_quality={'status':'non_speech','reasons':['low_audio_level']},asr_alternatives=[])
+            else:
+                def partial(text):
+                    emit('LIVE_PARTIAL',{'transcript':text,'window_start_ms':row['window_start_ms'],'window_end_ms':row['window_end_ms'],'window_seconds':row['window_seconds'],'capture_session_id':a.session_id,'partial':True})
+                row.update(asr.transcribe(audio,clipped_fraction=row['clipped_fraction'],on_partial=None if requested else partial,include_alternatives=requested));row['status']='transcribed'
+                if row['asr_quality']['status']=='non_speech':row.update(status='non_speech',message='No speech detected.',asr_alternatives=[])
+            emit('EVENT' if requested else 'LIVE',row)
+            # Snapshot events and the live transcript have separate channels. Neither calls Qwen here.
+            next_live=cycle_started+a.interval
+    finally:
+        capture.terminate()
+        try:capture.wait(timeout=3)
+        except subprocess.TimeoutExpired:capture.kill();capture.wait()
         print('STOPPED',flush=True)
 
 def main():
@@ -187,7 +249,8 @@ def main():
     # Warm encoder and decoder without opening the microphone.
     asr.transcribe(np.zeros(RATE,dtype=np.float32))
     emit('MODEL',{'status':'ready','backend':'ExecuTorch/QNN','resident':True})
-    worker=None;stop_event=threading.Event();trigger=threading.Event()
+    from rolling_context import RollingContext
+    worker=None;stop_event=threading.Event();control=None
     try:
         for line in sys.stdin:
             command=json.loads(line)
@@ -195,18 +258,24 @@ def main():
                 if worker and worker.is_alive():continue
                 if command.get('language','en') not in {'en','ko'} or command.get('target_language','ko') not in {'en','ko'}:
                     emit('MODEL',{'status':'error','error':'Unsupported language'});continue
-                a.language=command.get('language','en');a.target_language=command.get('target_language','ko')
-                a.duration=0;stop_event=threading.Event();trigger=threading.Event();trigger.set()
+                a.language=command.get('language','en');a.target_language=command.get('target_language','ko');a.session_id=command.get('session_id',0)
+                stop_event=threading.Event();control=RollingContext(RATE,a.window)
                 def run():
-                    try:capture_session(a,asr,stop_event,trigger)
+                    try:listen_session(a,asr,stop_event,control)
                     except Exception as error:emit('SESSION',{'status':'error','error':str(error)})
                     finally:emit('SESSION',{'status':'stopped'})
                 worker=threading.Thread(target=run,daemon=True);worker.start()
-            elif command.get('action')=='analyze':trigger.set()
-            elif command.get('action')=='stop':stop_event.set()
+            elif command.get('action')=='analyze':
+                try:
+                    if not worker or not worker.is_alive():raise ValueError('먼저 듣기를 시작해 주세요.')
+                    emit('SNAPSHOT',{**control.freeze(),'capture_session_id':a.session_id})
+                except ValueError as error:emit('REQUEST_ERROR',{'error':str(error)})
+            elif command.get('action')=='stop':
+                stop_event.set()
+                if worker:worker.join(timeout=30)
             elif command.get('action')=='shutdown':break
     finally:
         stop_event.set()
-        if worker:worker.join(timeout=190)
+        if worker:worker.join(timeout=30)
 
 if __name__=='__main__':main()

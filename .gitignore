@@ -10,3 +10,6 @@ hardware/live_ui/runtime-state.json
 hardware/live_ui/hardware-events.jsonl
 hardware/build/
 hardware/live_ui/tts-events.jsonl
+
+# Local chat archive
+hardware/live_ui/chat-history.json

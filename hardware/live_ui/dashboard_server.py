@@ -2,20 +2,31 @@
 """Resident ASR/Qwen dashboard and physical IDK Button controller."""
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 import json
+import uuid, re
 from pathlib import Path
 import subprocess,sys,threading,signal,urllib.request,time
 from hardware_bridge import HardwareBridge
 from dictionary_proxy import serve_dictionary, serve_dictionary_post
+from word_recall import RecallTracker, forms, TOKEN, spoken_text
+from asr_uncertainty import quality
+from transcript_stream import merge_partial, SentenceLedger, sentence_request
 
 ROOT=Path(__file__).resolve().parent
 LOCK=threading.RLock()
-STATE={'status':'loading','stage':'loading','model_status':'loading','level':None,'event':None,'history':[],'logs':[],'error':None,'session':0,'answers':[],'selected':0,'hardware':None,'hardware_error':None}
+RECALL=RecallTracker()
+LIVE_SENTENCES=SentenceLedger();LIVE_CHANGED=threading.Condition(LOCK);LIVE_STREAM_ID=uuid.uuid4().hex;LIVE_REVISION=0
+STATE={'chat_id':uuid.uuid4().hex,'chat_mode':None,'chat_messages':[],'chat_archive':[],'vocabulary':[],'recall':None,'status':'loading','stage':'loading','model_status':'loading','level':None,'event':None,'history':[],'logs':[],'error':None,'session':0,'words':[],'word_source':'','word_context':'','word_index':0,'word_notice':'','answers':[],'selected':0,'hardware':None,'hardware_error':None,'live':None,'snapshot':None,'snapshot_id':None,'context_decision':None,'pending_context':None,'generation':0,'context_mode':'sentences','frozen_sentence_context':'','requested_context_mode':'sentences','source_language':'en','target_language':'ko'}
+try:
+    STATE['chat_archive']=json.loads((ROOT/'chat-history.json').read_text())[-50:]
+except (OSError,ValueError,TypeError):pass
 PROCESS=None;SPEECH=None;SPEECH_ID=0;SERIAL='3220953353';CLOSING=False;HARDWARE=None
-STAGES={'loading':3,'idle':0,'recording':1,'transcribing':2,'thinking':3,'ready':4,'speaking':5,'error':6}
+STAGES={'loading':3,'idle':0,'recording':1,'transcribing':2,'thinking':3,'ready':4,'speaking':5,'error':6,'clarifying':4}
 
 def display(selection=None):
+    # Current MCU has three digit slots. Word navigation uses cumulative rotation
+    # counters and the screen highlight, so never send an out-of-range word index.
     if HARDWARE:
-        HARDWARE.display(STAGES.get(STATE['stage'],0),-1 if selection is None else selection,len(STATE['answers']))
+        HARDWARE.display(STAGES.get(STATE['stage'],0),-1 if selection is None else selection,len((STATE.get('pending_context') or {}).get('options',[])) or 0)
 
 def stage(value):
     STATE['stage']=value;display()
@@ -23,32 +34,149 @@ def stage(value):
     (ROOT/'runtime-state.json').write_text(json.dumps(STATE,ensure_ascii=False,indent=2)+'\n')
 
 def consume(proc):
+    kinds={'LEVEL','EVENT','LIVE','LIVE_PARTIAL','MODEL','SESSION','PHASE','SNAPSHOT','REQUEST_ERROR'}
     for line in proc.stdout:
-        line=line.strip()
+        line=line.strip();kind,_,payload=line.partition(' ')
         with LOCK:
-            if line.startswith(('LEVEL ','EVENT ','MODEL ','SESSION ','PHASE ')):
-                try:kind,payload=line.split(' ',1);data=json.loads(payload)
-                except (ValueError,TypeError):continue
-                if kind=='MODEL':
-                    STATE['model_status']=data['status'];print('Board model: '+data['status'],flush=True)
-                    STATE['status']='idle' if data['status']=='ready' else 'error';stage(STATE['status'])
-                elif kind=='LEVEL':STATE['level']=data
-                elif kind=='PHASE':
-                    if STATE['stage']!='speaking':stage(data['state'])
-                elif kind=='SESSION':
-                    STATE['status']=data['status'];STATE['error']=data.get('error') or STATE['error']
-                    stage('error' if STATE['error'] else 'ready' if STATE['answers'] else 'idle')
-                else:
-                    STATE['event']=data;STATE['history']=(STATE['history']+[data])[-25:];STATE['error']=data.get('api_error')
-                    answers=(data.get('translation') or {}).get('answers')
-                    if answers:STATE['answers']=answers;display()
-                    elif (data.get('asr_quality') or {}).get('status')=='non_speech':STATE['answers']=[];STATE['selected']=0;display()
-            else:
+            if kind not in kinds:
                 STATE['logs']=(STATE['logs']+[line])[-100:]
                 if line.startswith('READY:'):STATE['status']='recording';stage('recording')
+                continue
+            try:data=json.loads(payload)
+            except (ValueError,TypeError):continue
+            if kind=='SNAPSHOT' and data.get('capture_session_id') is not None and data['capture_session_id']!=STATE['session']:continue
+            if kind=='MODEL':
+                STATE['model_status']=data['status']
+                STATE['status']='idle' if data['status']=='ready' else 'error';stage(STATE['status'])
+                if data['status']=='ready' and not CLOSING:
+                    start({'language':STATE['source_language'],'target_language':STATE['target_language']})
+            elif kind=='LEVEL':STATE['level']=data
+            elif kind in {'LIVE','LIVE_PARTIAL'}:publish_live(data,partial=kind=='LIVE_PARTIAL')
+            elif kind=='SNAPSHOT':
+                STATE['snapshot']=data
+                STATE['snapshot_id']=str(STATE['session'])+':'+str(data['request_id'])
+            elif kind=='REQUEST_ERROR':STATE['error']=data['error'];stage('recording')
+            elif kind=='PHASE':
+                if STATE['stage']!='speaking':stage(data['state'])
+            elif kind=='SESSION':
+                STATE['status']=data['status'];STATE['error']=data.get('error')
+                stage('error' if STATE['error'] else 'clarifying' if STATE.get('pending_context') else 'ready' if STATE['answers'] else 'idle')
+            else:
+                if data.get('capture_session_id') is not None and (data['capture_session_id']!=STATE['session'] or STATE['status'] not in {'recording','starting'}):continue
+                data=normalize_event(data)
+                data['frozen_sentence_context']=STATE.get('frozen_sentence_context','')
+                data['context_mode']=STATE.get('requested_context_mode','sentences')
+                STATE['history']=(STATE['history']+[data])[-25:]
+                STATE['event']=data;STATE['error']=None
+                if data.get('request_id') is not None:
+                    STATE['snapshot']={k:data[k] for k in ['request_id','pressed_at','window_start_ms','window_end_ms','window_seconds'] if k in data}
+                    STATE['snapshot_id']=str(STATE['session'])+':'+str(data['request_id'])
+                if data['status']=='non_speech':
+                    STATE.update(words=[],word_source='',word_notice='',answers=[],selected=0,pending_context=None,context_decision=None);display();stage('recording')
+                else:process_snapshot(data)
     proc.wait()
     with LOCK:
-        if not CLOSING:STATE.update(status='error',model_status='error',error='The board model connection has ended.');stage('error')
+        if not CLOSING:STATE.update(status='error',model_status='error',error='보드 모델 연결이 종료되었습니다.');stage('error')
+
+def publish_live(data,partial=False):
+    global LIVE_REVISION
+    if data.get('capture_session_id') is not None and (data['capture_session_id']!=STATE['session'] or STATE['status'] not in {'recording','starting'}):return
+    silent=(data.get('asr_quality') or {}).get('status')=='non_speech'
+    view=LIVE_SENTENCES.update(data.get('transcript',''),partial=partial,silent=silent,
+        start_ms=data.get('window_start_ms',0),end_ms=data.get('window_end_ms',0))
+    previous=STATE.get('live') or {}
+    if partial and all(view.get(k)==previous.get(k) for k in ['transcript','draft_text','speech_status']):return
+    LIVE_REVISION+=1
+    STATE['live']={**data,**view,'partial':partial,'revision':LIVE_REVISION,'stream_id':LIVE_STREAM_ID}
+    LIVE_CHANGED.notify_all()
+    if not partial:
+        hits=RECALL.update(data.get('transcript',''),STATE.get('vocabulary',[]),silent=silent)
+        if hits:
+            STATE['recall']={'id':uuid.uuid4().hex,'chat_id':STATE['chat_id'],'hits':hits,'text':data.get('transcript',''),'time':time.time()}
+            if HARDWARE:HARDWARE.flash_recall()
+
+def normalize_event(data):
+    if quality(data.get('transcript',''),None,None,False)['status']=='non_speech' or (data.get('asr_quality') or {}).get('status')=='non_speech':
+        data={**data,'status':'non_speech','message':'No speech detected.','asr_quality':{**(data.get('asr_quality') or {}),'status':'non_speech'},'asr_alternatives':[]}
+        data.pop('translation',None);data.pop('api_seconds',None)
+    return data
+
+def api_request(path,payload):
+    request=urllib.request.Request('http://127.0.0.1:8000/'+path,data=json.dumps(payload,ensure_ascii=False).encode(),headers={'Content-Type':'application/json'})
+    with urllib.request.urlopen(request,timeout=180) as response:return json.load(response)
+
+def process_snapshot(row):
+    # Called under LOCK. A generation prevents old model responses replacing a newer snapshot.
+    STATE['generation']+=1;generation=STATE['generation'];session=STATE['session']
+    STATE.update(words=[],word_source='',word_notice='',event=dict(row),answers=[],selected=0,pending_context=None,context_decision=None,error=None)
+    stage('thinking')
+    text_request=sentence_request(row,row.get('context_mode','sentences'))
+    row['model_context_text']='\n'.join(x for x in [text_request['context'],text_request['transcript']] if x)
+    STATE['event']=dict(row)
+    payload={**text_request,'source_language':STATE['source_language'],
+             'target_language':STATE['target_language'],'elapsed_ms':row.get('elapsed_ms')}
+    mode=STATE.get('chat_mode')
+    if not mode:
+        STATE['pending_context']={'kind':'chat_mode','snapshot_id':STATE['snapshot_id'],'question':'이 채팅은 어떤 대화인가요?','options':['Casual · 일상 대화','Professional · 업무·기술 대화']}
+        stage('clarifying');return
+    payload['context']+='\nChat category selected by the user (keep for this chat): '+mode
+    def run():
+        try:
+            decision=api_request('context/resolve',payload)
+            if decision.get('decision_method')=='broad_context_fallback':
+                decision={**decision,'needs_clarification':False,'topic':mode,'options':[],'evidence':'','decision_method':'user_chat_category'}
+            with LOCK:
+                if CLOSING or session!=STATE['session'] or generation!=STATE['generation']:return
+                STATE['context_decision']=decision
+                if decision['needs_clarification']:
+                    if len(decision['options'])!=2 or len(set(decision['options']))!=2:raise ValueError('Two distinct contexts are required')
+                    STATE['pending_context']={**decision,'snapshot_id':STATE['snapshot_id']}
+                    display(0);stage('clarifying');return
+            translate_snapshot(row,payload,decision,session,generation)
+        except Exception as error:
+            with LOCK:
+                if CLOSING or session!=STATE['session'] or generation!=STATE['generation']:return
+                STATE['error']='문맥을 확인하지 못했습니다. 다시 분석해 주세요. '+str(error);stage('error')
+    threading.Thread(target=run,daemon=True).start()
+
+def translate_snapshot(row,payload,decision,session,generation,selection=None):
+    # The original frozen transcript stays untouched, regardless of newer LIVE events.
+    context=payload.get('context','')
+    if selection:context+='\nThe user explicitly selected this context: '+selection
+    elif decision.get('topic'):context+='\nSupported topic: '+decision['topic']+'\nEvidence: '+decision.get('evidence','')
+    tick=time.perf_counter();result=api_request('interpret/button',{**payload,'context':context})
+    with LOCK:
+        if CLOSING or session!=STATE['session'] or generation!=STATE['generation']:return
+        STATE['event']={**row,'chat_mode':STATE.get('chat_mode'),'translation':result,'translation_context':context,'api_seconds':time.perf_counter()-tick,'selected_context':selection}
+        STATE['chat_messages']=(STATE.get('chat_messages',[])+[dict(STATE['event'])])[-100:]
+        STATE.update(answers=result['answers'],selected=0,pending_context=None,error=None)
+        source=result.get('source') or decision.get('source') or payload['transcript']
+        STATE.update(words=[{'word':m.group(),'start':m.start(),'end':m.end(),'status':'waiting','meaning':None} for m in re.finditer(r"[^\W_]+(?:['’\-][^\W_]+)*",source)],word_source=source,word_context=context,word_index=0,word_notice='')
+        display(0);stage('ready')
+    schedule_word()
+
+def choose_context(index,snapshot_id):
+    with LOCK:
+        pending=STATE.get('pending_context')
+        if not pending or pending['snapshot_id']!=snapshot_id:raise ValueError('이미 바뀐 문맥 질문입니다. 현재 질문에서 골라 주세요.')
+        if type(index)!=int or index not in (0,1):raise ValueError('문맥 후보 하나를 선택해 주세요.')
+        if pending.get('kind')=='chat_mode':
+            STATE['chat_mode']=['Casual','Professional'][index]
+            STATE['pending_context']=None;process_snapshot(dict(STATE['event']));return
+        row=dict(STATE['event']);session=STATE['session'];generation=STATE['generation']
+        payload={**sentence_request(row,row.get('context_mode','sentences')),'source_language':STATE['source_language'],'target_language':STATE['target_language'],'elapsed_ms':row.get('elapsed_ms')}
+        payload['context']+='\nChat category selected by the user (keep for this chat): '+str(STATE.get('chat_mode') or '')
+        selection=pending['options'][index]
+        STATE['event']={**row,'selected_context':selection}
+        payload['context_selection']=pending.get('option_contexts',pending['options'])[index]
+        STATE['pending_context']=None;stage('thinking')
+    def run():
+        try:translate_snapshot(row,payload,pending,session,generation,selection)
+        except Exception as error:
+            with LOCK:
+                if CLOSING or session!=STATE['session'] or generation!=STATE['generation']:return
+                STATE['pending_context']=pending;STATE['error']=str(error);stage('clarifying')
+    threading.Thread(target=run,daemon=True).start()
 
 def initialize():
     global PROCESS
@@ -67,34 +195,85 @@ def initialize():
         with LOCK:STATE.update(status='error',model_status='error',error=str(error));stage('error')
 
 def send(command):
-    if PROCESS is None or PROCESS.poll() is not None:raise RuntimeError('Check the model connection.')
+    if PROCESS is None or PROCESS.poll() is not None:raise RuntimeError('모델 연결을 확인하세요.')
     PROCESS.stdin.write(json.dumps(command)+'\n');PROCESS.stdin.flush()
 
 def start(data):
+    global LIVE_SENTENCES
     with LOCK:
-        if STATE['model_status']!='ready':raise ValueError('Wait until the model is ready.')
+        if STATE['model_status']!='ready':raise ValueError('모델 준비가 완료될 때까지 기다려 주세요.')
         if STATE['status'] in {'starting','recording','stopping'}:return
         language=data.get('language','en');target=data.get('target_language','ko')
         if language not in {'en','ko'} or target not in {'en','ko'}:raise ValueError('Unsupported language')
-        send({'action':'start','language':language,'target_language':target})
-        STATE.update(status='starting',level=None,event=None,history=[],error=None,session=STATE['session']+1,answers=[],selected=0,target_language=target,source_language=language)
+        LIVE_SENTENCES=SentenceLedger()
+        send({'action':'start','language':language,'target_language':target,'session_id':STATE['session']+1})
+        STATE.update(words=[],word_source='',word_notice='',status='starting',level=None,live=None,event=None,history=[],error=None,session=STATE['session']+1,generation=STATE['generation']+1,answers=[],selected=0,pending_context=None,context_decision=None,snapshot=None,snapshot_id=None,target_language=target,source_language=language)
         stage('recording')
+
+def new_chat():
+    global RECALL,LIVE_SENTENCES,LIVE_REVISION,LIVE_STREAM_ID,SPEECH_ID
+    with LOCK:
+        if STATE['model_status']!='ready':raise ValueError('모델을 준비하는 중입니다.')
+        archive={'id':STATE['chat_id'],'mode':STATE.get('chat_mode'),'messages':STATE.get('chat_messages',[]),'ended_at':time.time()}
+        STATE['chat_archive']=(STATE.get('chat_archive',[])+[archive])[-50:]
+        (ROOT/'chat-history.json').write_text(json.dumps(STATE['chat_archive'],ensure_ascii=False,indent=2))
+        # Stop and start are ordered on the board stdin; stop joins the old audio
+        # worker before start creates an empty PCM ring for the new chat.
+        send({'action':'stop'})
+        STATE.update(chat_id=uuid.uuid4().hex,chat_mode=None,chat_messages=[],recall=None,status='idle',frozen_sentence_context='',requested_context_mode=STATE['context_mode'])
+        if HARDWARE:HARDWARE.clear_recall()
+        RECALL=RecallTracker();LIVE_SENTENCES=SentenceLedger();LIVE_STREAM_ID=uuid.uuid4().hex;LIVE_REVISION+=1
+        SPEECH_ID+=1
+        if SPEECH is not None and SPEECH.poll() is None:SPEECH.terminate()
+        start({'language':STATE['source_language'],'target_language':STATE['target_language']})
+        LIVE_CHANGED.notify_all()
+
+def refresh_vocabulary():
+    while not CLOSING:
+        try:
+            entries=[]
+            for offset in range(0,10000,100):
+                with urllib.request.urlopen('http://127.0.0.1:8000/expressions?limit=100&offset='+str(offset),timeout=10) as response:batch=json.load(response)
+                entries+=batch
+                if len(batch)<100:break
+            with LOCK:
+                old={x['expression'].casefold() for x in STATE.get('vocabulary',[])}
+                text=(STATE.get('live') or {}).get('transcript','')
+                prime_vocabulary(entries,old,text)
+                STATE['vocabulary']=entries
+        except Exception as error:
+            with LOCK:STATE['vocabulary_error']='단어장 동기화 실패: '+str(error)
+        else:
+            with LOCK:STATE['vocabulary_error']=None
+        for _ in range(50):
+            if CLOSING:return
+            time.sleep(.1)
+
+def prime_vocabulary(entries,old,text):
+    tokens=TOKEN.findall(spoken_text(text))
+    for entry in entries:
+        key=entry['expression'].casefold()
+        if key not in old:RECALL.previous[key]=sum(bool(forms(t)&forms(key)) for t in tokens)
 
 def analyze():
     with LOCK:
-        if STATE['status']!='recording':raise ValueError('Start recording first.')
+        if STATE['status']!='recording':raise ValueError('입력을 먼저 시작하세요.')
         if STATE['stage'] in {'thinking','transcribing','speaking'}:return
-        send({'action':'analyze'});STATE['error']=None;stage('recording')
+        STATE['frozen_sentence_context']=(STATE.get('live') or {}).get('transcript','')
+        STATE['requested_context_mode']=STATE.get('context_mode','sentences')
+        STATE.update(words=[],word_source='',word_notice='',error=None,event=None,answers=[],selected=0,pending_context=None,context_decision=None);STATE['generation']+=1
+        send({'action':'analyze'});stage('transcribing')
 
 def stop():
     with LOCK:
-        if STATE['status'] in {'starting','recording'}:send({'action':'stop'});STATE['status']='stopping'
+        if STATE['status'] in {'starting','recording'}:
+            send({'action':'stop'});STATE['status']='stopping';STATE['generation']+=1
 
 def speak():
     global SPEECH,SPEECH_ID
     with LOCK:
-        if not STATE['answers']:raise ValueError('No answer is available yet.')
-        if STATE['stage'] in {'thinking','transcribing'}:raise ValueError('Analysis is in progress.')
+        if not STATE['answers']:raise ValueError('아직 선택할 답변이 없습니다.')
+        if STATE['stage'] in {'thinking','transcribing'}:raise ValueError('현재 분석 중입니다.')
         if SPEECH is not None and SPEECH.poll() is None:SPEECH.terminate()
         text=STATE['answers'][STATE['selected']]['text']
         voice='Yuna (한국어(한국))' if STATE.get('target_language','ko')=='ko' else 'Samantha (영어(미국))'
@@ -118,32 +297,11 @@ def speak():
 
 def choose_transcript(index):
     with LOCK:
-        if STATE['stage'] in {'thinking','transcribing','speaking'}:raise ValueError('Wait for the current task to finish before choosing a transcript.')
-        row=STATE.get('event') or {}
-        primary=row.get('asr_primary_transcript',row.get('transcript'))
+        if STATE['stage'] in {'thinking','transcribing','speaking'}:raise ValueError('현재 작업이 끝난 뒤 선택하세요.')
+        row=STATE.get('event') or {};primary=row.get('asr_primary_transcript',row.get('transcript'))
         candidates=[primary]+[x['text'] for x in row.get('asr_alternatives',[])]
         if type(index)!=int or not 0<=index<len(candidates) or not candidates[index]:raise ValueError('Invalid transcript candidate')
-        chosen=candidates[index];session=STATE['session'];STATE['error']=None
-        payload={'transcript':chosen,'context':'','source_language':STATE.get('source_language','en'),
-            'target_language':STATE.get('target_language','ko'),'elapsed_ms':row.get('elapsed_ms')}
-        original=dict(row);stage('thinking')
-    def translate_choice():
-        tick=time.perf_counter()
-        try:
-            request=urllib.request.Request('http://127.0.0.1:8000/interpret/button',data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
-            with urllib.request.urlopen(request,timeout=180) as response:result=json.load(response);status=response.status
-            with LOCK:
-                if CLOSING or STATE['session']!=session:return
-                updated={**original,'asr_primary_transcript':primary,'transcript':chosen,'asr_selected_index':index,
-                    'translation':result,'http_status':status,'api_seconds':time.perf_counter()-tick}
-                updated.pop('api_error',None)
-                STATE['event']=updated;STATE['answers']=result['answers'];STATE['selected']=0
-                STATE['history']=(STATE['history']+[updated])[-25:];display(0);stage('ready')
-        except Exception as error:
-            with LOCK:
-                if CLOSING or STATE['session']!=session:return
-                STATE['error']=str(error);stage('error')
-    threading.Thread(target=translate_choice,daemon=True).start()
+        process_snapshot({**row,'asr_primary_transcript':primary,'transcript':candidates[index],'asr_selected_index':index})
 
 def hardware_error(message):
     with LOCK:STATE['hardware_error']=message
@@ -153,26 +311,94 @@ def hardware_sample(value):
         if CLOSING:return
         previous=STATE['hardware'];STATE['hardware']=value;STATE['hardware_error']=None
         if not previous:return
-        if STATE['answers']:STATE['selected']=min(value['selected'],len(STATE['answers'])-1)
         changed={key:value[key]-previous[key] for key in ['rotations','clicks','holds']}
+        pending=STATE.get('pending_context')
+        count=len(pending['options']) if pending else len(STATE.get('words',[]))
+        if count and changed['rotations']:
+            if pending:STATE['selected']=(STATE['selected']+changed['rotations'])%count
+            else:select_word((STATE['word_index']+changed['rotations'])%count)
         if not any(changed.values()):return
         event={'time':time.time(),'delta':changed,'state':value,'stage':STATE['stage']}
         with (ROOT/'hardware-events.jsonl').open('a') as f:f.write(json.dumps(event)+'\n')
         if STATE['model_status']!='ready':return
         try:
-            if changed['holds']>0:
-                if STATE['status'] not in {'starting','recording','stopping'}:start({})
-                else:analyze()
-            elif changed['clicks']>0:
-                if STATE['answers'] and STATE['stage'] in {'ready','speaking'}:speak()
-                elif STATE['status'] not in {'starting','recording','stopping'}:start({})
-                else:analyze()
+            if changed['holds']>0 or changed['clicks']>0:
+                pending=STATE.get('pending_context')
+                if changed['holds']>0:new_chat()
+                elif pending and changed['clicks']>0 and not changed['holds']:
+                    choose_context(STATE['selected'],pending['snapshot_id'])
+                elif changed['clicks']>0 and not changed['holds'] and STATE.get('words'):
+                    index=STATE['word_index'];generation=STATE['generation']
+                    threading.Thread(target=save_word_safely,args=(index,generation),daemon=True).start()
+                elif STATE['status']=='recording':analyze()
+                else:start({'language':STATE['source_language'],'target_language':STATE['target_language']})
         except Exception as error:STATE['error']=str(error)
+def schedule_word():
+    with LOCK:
+        if not STATE.get('words') or STATE.get('pending_context'):return
+        index=STATE['word_index'];generation=STATE['generation'];session=STATE['session']
+        token=STATE['words'][index]
+        if token['status'] not in {'waiting','error'}:return
+        payload={'source':STATE['word_source'],'index':index,'context':STATE['word_context'],'target_language':STATE['target_language']}
+    def lookup():
+        # Debounce rotations. Only the word the user rests on starts a model request.
+        time.sleep(.35)
+        with LOCK:
+            if generation!=STATE['generation'] or session!=STATE['session'] or index!=STATE['word_index']:return
+            if token['status'] not in {'waiting','error'}:return
+            token['status']='loading'
+        try:
+            result=api_request('words/meaning',payload)
+            with LOCK:
+                if generation==STATE['generation'] and session==STATE['session'] and token in STATE['words']:token.update(result)
+        except Exception:
+            with LOCK:
+                if generation==STATE['generation'] and session==STATE['session']:token.update(status='error',meaning=None)
+    threading.Thread(target=lookup,daemon=True).start()
+
+def select_word(index):
+    with LOCK:
+        if STATE.get('pending_context'):raise ValueError('문맥을 먼저 선택해 주세요.')
+        if type(index)!=int or not 0<=index<len(STATE.get('words',[])):raise ValueError('Invalid word selection')
+        STATE['word_index']=index;STATE['word_notice']='';schedule_word();display()
+
+def save_current_word(index=None,generation=None):
+    with LOCK:
+        if generation is not None and generation!=STATE['generation']:raise ValueError('문장이 바뀌었습니다. 다시 선택해 주세요.')
+        if index is not None and index!=STATE['word_index']:raise ValueError('선택 단어가 바뀌었습니다. 다시 눌러 주세요.')
+        if STATE.get('pending_context') or STATE['stage'] in {'thinking','transcribing','clarifying','error'}:raise ValueError('해석이 끝난 뒤 저장해 주세요.')
+        tokens=STATE.get('words',[])
+        if not tokens:raise ValueError('저장할 단어가 없습니다.')
+        token=tokens[STATE['word_index']]
+        if token.get('saved'):return token['saved']
+        if token.get('saving'):raise ValueError('저장 중입니다.')
+        if token['status']!='ready' or not token.get('meaning'):raise ValueError('문맥에 맞는 뜻을 확인한 뒤 저장해 주세요.')
+        token['saving']=True
+        payload={'expression':token['word'],'meaning':token['meaning'],'translation':token['meaning'],'example':STATE['word_source'],'target_language':STATE['target_language']}
+    try:result=api_request('expressions',payload)
+    finally:
+        with LOCK:token['saving']=False
+    with LOCK:
+        token['saved']=result
+        old={x['expression'].casefold() for x in STATE.get('vocabulary',[])}
+        prime_vocabulary([result],old,(STATE.get('live') or {}).get('transcript',''))
+        STATE['vocabulary']=[result]+STATE.get('vocabulary',[])
+        if token in STATE.get('words',[]):STATE['word_notice']=token['word']+' · 내 단어장에 등록했습니다.'
+    return result
+
+def save_word_safely(index=None,generation=None):
+    try:save_current_word(index,generation)
+    except Exception as error:
+        with LOCK:STATE['word_notice']=str(error)
+
 def save_current_translation():
     with LOCK:
-        if STATE['stage'] in {'thinking', 'transcribing'}:
+        if STATE.get('pending_context') or STATE['stage'] in {'thinking', 'transcribing', 'clarifying'}:
             raise ValueError('Wait for the current analysis to finish.')
-        result = (STATE.get('event') or {}).get('translation')
+        event=STATE.get('event') or {}
+        if (event.get('asr_quality') or {}).get('status')=='non_speech' or quality(event.get('transcript',''),None,None,False)['status']=='non_speech':
+            raise ValueError('No speech detected.')
+        result = event.get('translation')
         if not result:
             raise ValueError('No translation to save yet.')
         payload = {key: result[key] for key in (
@@ -193,14 +419,21 @@ class Handler(BaseHTTPRequestHandler):
         raw=data if isinstance(data,bytes) else json.dumps(data,ensure_ascii=False).encode()
         self.send_response(status);self.send_header('Content-Type',content_type);self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
     def do_GET(self):
-        if serve_dictionary(self, ROOT):
-            return
+        if serve_dictionary(self, ROOT):return
         if self.path == '/':
             self.reply(200, (ROOT / 'dashboard.html').read_bytes(),
                        'text/html; charset=utf-8')
+        elif self.path == '/transcript_view.js':
+            self.reply(200,(ROOT/'transcript_view.js').read_bytes(),'application/javascript; charset=utf-8')
+        elif self.path == '/api/live':
+            self.live_events()
         elif self.path == '/api/state':
             with LOCK:
                 self.reply(200, STATE)
+        elif self.path == '/api/words':
+            try:
+                with urllib.request.urlopen('http://127.0.0.1:8000/expressions',timeout=10) as response:self.reply(200,json.load(response))
+            except Exception:self.reply(502,{'error':'단어장을 불러오지 못했습니다.'})
         elif self.path == '/api/translations':
             try:
                 with urllib.request.urlopen(
@@ -214,11 +447,24 @@ class Handler(BaseHTTPRequestHandler):
                 })
         else:
             self.reply(404, {'error': 'Not found'})
+    def live_events(self):
+        self.send_response(200);self.send_header('Content-Type','text/event-stream');self.send_header('Cache-Control','no-cache');self.end_headers()
+        revision=-1
+        try:
+            while not CLOSING:
+                with LIVE_CHANGED:
+                    if revision==LIVE_REVISION:LIVE_CHANGED.wait(timeout=15)
+                    revision=LIVE_REVISION;data=STATE.get('live')
+                if data:
+                    self.wfile.write(('event: transcript\ndata: '+json.dumps(data,ensure_ascii=False)+'\n\n').encode())
+                else:self.wfile.write(b': listening\n\n')
+                self.wfile.flush()
+        except (BrokenPipeError,ConnectionResetError):pass
+
     def do_POST(self):
         origin=self.headers.get('Origin')
         if origin and origin not in {'http://127.0.0.1:8010','http://localhost:8010'}:self.reply(403,{'error':'Invalid origin'});return
-        if serve_dictionary_post(self):
-            return
+        if serve_dictionary_post(self):return
         try:
             length=int(self.headers.get('Content-Length','0'))
             if not 0<=length<=2048:raise ValueError('Request too large')
@@ -235,14 +481,24 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self.reply(201, saved)
                 return
+            elif self.path=='/api/word-select':select_word(data.get('index'))
+            elif self.path=='/api/word-save':
+                self.reply(201,save_current_word(data.get('index'),data.get('generation')));return
             elif self.path=='/api/stop':stop()
             elif self.path=='/api/analyze':analyze()
+            elif self.path=='/api/new-chat':new_chat()
             elif self.path=='/api/speak':speak()
+            elif self.path=='/api/context-mode':
+                mode=data.get('mode')
+                if mode not in {'sentences','time'}:raise ValueError('Invalid context mode')
+                with LOCK:STATE['context_mode']=mode
+            elif self.path=='/api/context':choose_context(data.get('index'),data.get('snapshot_id'))
             elif self.path=='/api/transcript':choose_transcript(data.get('index'))
             elif self.path=='/api/select':
                 with LOCK:
                     index=data.get('index')
-                    if type(index)!=int or not 0<=index<len(STATE['answers']):raise ValueError('Invalid selection')
+                    count=len((STATE.get('pending_context') or {}).get('options',[])) or len(STATE['answers'])
+                    if type(index)!=int or not 0<=index<count:raise ValueError('Invalid selection')
                     STATE['selected']=index;display(index)
             else:self.reply(404,{'error':'Not found'});return
             self.reply(200,{'ok':True})
@@ -255,6 +511,7 @@ if __name__=='__main__':
     server=ThreadingHTTPServer(('127.0.0.1',8010),Handler)
     HARDWARE=HardwareBridge(SERIAL,hardware_sample,hardware_error);HARDWARE.start()
     threading.Thread(target=initialize,daemon=True).start()
+    threading.Thread(target=refresh_vocabulary,daemon=True).start()
     print('Dashboard: http://127.0.0.1:8010',flush=True)
     try:server.serve_forever()
     except KeyboardInterrupt:pass
