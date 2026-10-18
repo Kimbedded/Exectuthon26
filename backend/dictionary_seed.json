@@ -1,0 +1,202 @@
+[
+  {
+    "key": "en.ground.reference",
+    "term": "ground",
+    "language": "en",
+    "domain": "Electrical: circuit reference",
+    "meaning": "A connection or node used as the reference for circuit voltages.",
+    "example": "Measure the signal relative to circuit ground."
+  },
+  {
+    "key": "en.ground.earth",
+    "term": "ground",
+    "language": "en",
+    "domain": "Electrical: protective earth",
+    "meaning": "An electrical connection to the earth used for protection.",
+    "example": "The technician is checking the ground connection."
+  },
+  {
+    "key": "en.ground.soil",
+    "term": "ground",
+    "language": "en",
+    "domain": "Construction / everyday",
+    "meaning": "The soil or solid surface beneath your feet.",
+    "example": "Check the ground beneath the foundation."
+  },
+  {
+    "key": "en.lead.wire",
+    "term": "lead",
+    "language": "en",
+    "domain": "Electrical",
+    "meaning": "A wire connecting a component, sensor, or test instrument to a circuit.",
+    "example": "Check the lead from the temperature sensor."
+  },
+  {
+    "key": "en.lead.guide",
+    "term": "lead",
+    "language": "en",
+    "domain": "Everyday: action",
+    "meaning": "To guide a person or group.",
+    "example": "Please lead the team through the demonstration."
+  },
+  {
+    "key": "en.lead.metal",
+    "term": "lead",
+    "language": "en",
+    "domain": "Material",
+    "meaning": "The metal called lead; this sense is pronounced 'led'.",
+    "example": "This material contains lead."
+  },
+  {
+    "key": "en.pitch.thread",
+    "term": "pitch",
+    "language": "en",
+    "domain": "Mechanical: screw threads",
+    "meaning": "The distance between corresponding points on adjacent screw threads.",
+    "example": "Check the pitch before choosing a matching nut."
+  },
+  {
+    "key": "en.pitch.sound",
+    "term": "pitch",
+    "language": "en",
+    "domain": "Sound",
+    "meaning": "How high or low a sound is.",
+    "example": "The motor noise has a higher pitch now."
+  },
+  {
+    "key": "en.pitch.presentation",
+    "term": "pitch",
+    "language": "en",
+    "domain": "Presentation",
+    "meaning": "A short presentation intended to persuade someone about an idea.",
+    "example": "We have three minutes for our project pitch."
+  },
+  {
+    "key": "en.load.electrical",
+    "term": "load",
+    "language": "en",
+    "domain": "Electrical",
+    "meaning": "A device or circuit drawing electrical power, or its demand for power.",
+    "example": "Reduce the load on this power supply."
+  },
+  {
+    "key": "en.load.weight",
+    "term": "load",
+    "language": "en",
+    "domain": "Mechanical",
+    "meaning": "Weight or force supported by a structure or mechanism.",
+    "example": "The bracket supports the load."
+  },
+  {
+    "key": "en.load.computing",
+    "term": "load",
+    "language": "en",
+    "domain": "Computing",
+    "meaning": "The amount of work being handled by a computer or service.",
+    "example": "The server load increased during the test."
+  },
+  {
+    "key": "en.offset.cnc",
+    "term": "offset",
+    "language": "en",
+    "domain": "Manufacturing: CNC",
+    "meaning": "A value used to account for a tool's position or dimensions.",
+    "example": "Check the tool offset before reviewing the program."
+  },
+  {
+    "key": "en.offset.position",
+    "term": "offset",
+    "language": "en",
+    "domain": "Position / measurement",
+    "meaning": "A displacement or difference from a reference position or value.",
+    "example": "The drawing shows a small offset between the two centers."
+  },
+  {
+    "key": "en.play.looseness",
+    "term": "play",
+    "language": "en",
+    "domain": "Mechanical",
+    "meaning": "Free movement or looseness between mechanical parts.",
+    "example": "There is too much play in the shaft."
+  },
+  {
+    "key": "en.play.recreation",
+    "term": "play",
+    "language": "en",
+    "domain": "Everyday",
+    "meaning": "To take part in a game or recreational activity.",
+    "example": "The children play outside."
+  },
+  {
+    "key": "en.flash.firmware",
+    "term": "flash",
+    "language": "en",
+    "domain": "Embedded software",
+    "meaning": "To write firmware to a device's programmable memory.",
+    "example": "Flash the board with the new firmware."
+  },
+  {
+    "key": "en.flash.light",
+    "term": "flash",
+    "language": "en",
+    "domain": "Light",
+    "meaning": "A brief burst of light.",
+    "example": "The camera produced a bright flash."
+  },
+  {
+    "key": "en.bond.electrical",
+    "term": "bond",
+    "language": "en",
+    "domain": "Electrical",
+    "meaning": "An intentional conductive connection between metal parts.",
+    "example": "The technician is checking the bond between the metal parts."
+  },
+  {
+    "key": "en.bond.relationship",
+    "term": "bond",
+    "language": "en",
+    "domain": "Everyday",
+    "meaning": "A connection or relationship between people.",
+    "example": "Working together strengthened the team's bond."
+  },
+  {
+    "key": "en.tap.thread",
+    "term": "tap",
+    "language": "en",
+    "domain": "Manufacturing",
+    "meaning": "A cutting tool used to create an internal screw thread.",
+    "example": "Replace the tap used to thread this hole."
+  },
+  {
+    "key": "en.tap.faucet",
+    "term": "tap",
+    "language": "en",
+    "domain": "Plumbing",
+    "meaning": "A faucet or valve used to control a water supply.",
+    "example": "Turn off the water tap."
+  },
+  {
+    "key": "en.tap.touch",
+    "term": "tap",
+    "language": "en",
+    "domain": "Everyday: action",
+    "meaning": "To touch something briefly and lightly.",
+    "example": "Tap the button once."
+  },
+  {
+    "key": "en.floating.electrical",
+    "term": "floating",
+    "language": "en",
+    "domain": "Electrical",
+    "meaning": "Not connected to a defined electrical reference.",
+    "example": "The unconnected signal input is floating."
+  },
+  {
+    "key": "en.floating.water",
+    "term": "floating",
+    "language": "en",
+    "domain": "Everyday",
+    "meaning": "Being supported at the surface of a liquid.",
+    "example": "The small boat is floating on the lake."
+  }
+]

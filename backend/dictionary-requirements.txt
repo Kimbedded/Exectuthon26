@@ -1,0 +1,2 @@
+# Needed only to import the corpus. Lookup uses Python's standard library.
+nltk==3.10.3

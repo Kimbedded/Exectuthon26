@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess,sys,threading,signal,urllib.request,time
 from hardware_bridge import HardwareBridge
+from dictionary_proxy import serve_dictionary, serve_dictionary_post
 
 ROOT=Path(__file__).resolve().parent
 LOCK=threading.RLock()
@@ -47,7 +48,7 @@ def consume(proc):
                 if line.startswith('READY:'):STATE['status']='recording';stage('recording')
     proc.wait()
     with LOCK:
-        if not CLOSING:STATE.update(status='error',model_status='error',error='보드 모델 연결이 종료되었습니다.');stage('error')
+        if not CLOSING:STATE.update(status='error',model_status='error',error='The board model connection has ended.');stage('error')
 
 def initialize():
     global PROCESS
@@ -66,12 +67,12 @@ def initialize():
         with LOCK:STATE.update(status='error',model_status='error',error=str(error));stage('error')
 
 def send(command):
-    if PROCESS is None or PROCESS.poll() is not None:raise RuntimeError('모델 연결을 확인하세요.')
+    if PROCESS is None or PROCESS.poll() is not None:raise RuntimeError('Check the model connection.')
     PROCESS.stdin.write(json.dumps(command)+'\n');PROCESS.stdin.flush()
 
 def start(data):
     with LOCK:
-        if STATE['model_status']!='ready':raise ValueError('모델 준비가 완료될 때까지 기다려 주세요.')
+        if STATE['model_status']!='ready':raise ValueError('Wait until the model is ready.')
         if STATE['status'] in {'starting','recording','stopping'}:return
         language=data.get('language','en');target=data.get('target_language','ko')
         if language not in {'en','ko'} or target not in {'en','ko'}:raise ValueError('Unsupported language')
@@ -81,7 +82,7 @@ def start(data):
 
 def analyze():
     with LOCK:
-        if STATE['status']!='recording':raise ValueError('입력을 먼저 시작하세요.')
+        if STATE['status']!='recording':raise ValueError('Start recording first.')
         if STATE['stage'] in {'thinking','transcribing','speaking'}:return
         send({'action':'analyze'});STATE['error']=None;stage('recording')
 
@@ -92,8 +93,8 @@ def stop():
 def speak():
     global SPEECH,SPEECH_ID
     with LOCK:
-        if not STATE['answers']:raise ValueError('아직 선택할 답변이 없습니다.')
-        if STATE['stage'] in {'thinking','transcribing'}:raise ValueError('현재 분석 중입니다.')
+        if not STATE['answers']:raise ValueError('No answer is available yet.')
+        if STATE['stage'] in {'thinking','transcribing'}:raise ValueError('Analysis is in progress.')
         if SPEECH is not None and SPEECH.poll() is None:SPEECH.terminate()
         text=STATE['answers'][STATE['selected']]['text']
         voice='Yuna (한국어(한국))' if STATE.get('target_language','ko')=='ko' else 'Samantha (영어(미국))'
@@ -117,7 +118,7 @@ def speak():
 
 def choose_transcript(index):
     with LOCK:
-        if STATE['stage'] in {'thinking','transcribing','speaking'}:raise ValueError('현재 작업이 끝난 뒤 선택하세요.')
+        if STATE['stage'] in {'thinking','transcribing','speaking'}:raise ValueError('Wait for the current task to finish before choosing a transcript.')
         row=STATE.get('event') or {}
         primary=row.get('asr_primary_transcript',row.get('transcript'))
         candidates=[primary]+[x['text'] for x in row.get('asr_alternatives',[])]
@@ -192,6 +193,8 @@ class Handler(BaseHTTPRequestHandler):
         raw=data if isinstance(data,bytes) else json.dumps(data,ensure_ascii=False).encode()
         self.send_response(status);self.send_header('Content-Type',content_type);self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
     def do_GET(self):
+        if serve_dictionary(self, ROOT):
+            return
         if self.path == '/':
             self.reply(200, (ROOT / 'dashboard.html').read_bytes(),
                        'text/html; charset=utf-8')
@@ -214,6 +217,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         origin=self.headers.get('Origin')
         if origin and origin not in {'http://127.0.0.1:8010','http://localhost:8010'}:self.reply(403,{'error':'Invalid origin'});return
+        if serve_dictionary_post(self):
+            return
         try:
             length=int(self.headers.get('Content-Length','0'))
             if not 0<=length<=2048:raise ValueError('Request too large')

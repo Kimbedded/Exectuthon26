@@ -6,6 +6,8 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from database import init_db, list_expressions, save_expression
+from dictionary_api import router as dictionary_router
+from dictionary_store import init_dictionary
 from idk_client import interpret as interpret_ai
 from schemas import SavedTranslation, TranslationResult, EnrichedTranslationResult, ButtonTranslationResult
 from translation_store import init_translation_store, list_translations, save_translation
@@ -15,10 +17,12 @@ from translation_store import init_translation_store, list_translations, save_tr
 async def lifespan(app: FastAPI):
     init_db()
     init_translation_store()
+    init_dictionary()
     yield
 
 
 app = FastAPI(title="IDK Button", lifespan=lifespan)
+app.include_router(dictionary_router)
 
 
 class InterpretRequest(BaseModel):

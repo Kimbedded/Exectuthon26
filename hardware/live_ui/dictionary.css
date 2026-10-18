@@ -1,0 +1,29 @@
+.layout{align-items:start}
+#dictionaryPanel{margin:0;min-width:0}
+#dictionaryPanel [hidden]{display:none!important}
+#dictionaryPanel h2{font-size:22px;margin:0 0 8px}
+#dictionaryPanel .dictionary-intro{font-size:14px;margin:0 0 12px}
+#dictionaryPanel :is(button,a):focus-visible{outline:2px solid #91edcb;outline-offset:3px}
+#dictionaryPanel .dictionary-word-region{min-height:180px;padding-bottom:20px}
+#dictionaryPanel .dictionary-word-options{max-height:230px;overflow:auto;overscroll-behavior:contain;padding:2px}
+#dictionaryPanel .dictionary-group-label{font-size:12px;color:#a5bad0;margin:12px 0 6px}
+#dictionaryPanel .dictionary-meaning-region{min-height:220px;border-top:1px solid #34465c;padding-top:22px}
+#dictionaryPanel .dictionary-result{white-space:pre-wrap;overflow-wrap:anywhere;color:#bcd0e2;border-left:3px solid #73e4b8;padding-left:14px}
+#dictionaryPanel .dictionary-meta{font-size:12px;color:#9ab0c7;margin-top:18px}
+#dictionaryPanel .dictionary-matches{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+#dictionaryPanel .dictionary-match{font-size:14px;padding:9px 12px;max-width:100%;overflow-wrap:anywhere;text-align:left}
+#dictionaryPanel .dictionary-match[aria-pressed="true"]{border-color:#73e4b8;background:#15322d;color:#91edcb}
+#dictionaryPanel .dictionary-match small{display:block;font-size:11px;margin-top:4px;color:#a5bad0}
+#dictionaryPanel .dictionary-meanings{max-height:340px;overflow:auto;overscroll-behavior:contain;padding-right:6px}
+#dictionaryPanel .dictionary-meaning{padding:16px;background:#101b29;border:1px solid #314259;border-radius:12px;margin:12px 0}
+#dictionaryPanel .dictionary-meaning h3{font-size:13px;color:#91edcb;margin:0 0 10px;line-height:1.5}
+#dictionaryPanel .dictionary-definition{font-size:17px;color:#e7edf7;margin:0 0 10px;line-height:1.6}
+#dictionaryPanel .dictionary-example{color:#b1c3d5;font-size:14px;margin:8px 0;white-space:pre-wrap}
+#dictionaryPanel .dictionary-synonyms{font-size:13px;margin:8px 0;color:#bcd0e2}
+#dictionaryPanel .dictionary-credit{font-size:12px;color:#8ca2ba;margin:12px 0 0}
+#dictionaryPanel a{color:#91edcb}
+#dictionaryPanel #dictionaryStatus{font-size:13px;min-height:1.6em;margin:10px 0}
+#dictionaryPanel #dictionaryHeading{font-size:17px;line-height:1.5;margin:8px 0}
+#conversationPanel .translation-choices{border-top:1px solid #293b50;padding-top:16px;margin-bottom:0}
+#conversationPanel .translation-choices summary{cursor:pointer;color:#bcd0e2}
+@media(max-width:760px){#dictionaryPanel .dictionary-word-options{max-height:200px}#dictionaryPanel .dictionary-meanings{max-height:380px}}
