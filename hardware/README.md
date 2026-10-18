@@ -4,6 +4,14 @@ See [Screen/Button handoff](../docs/SCREEN_BUTTON_HANDOFF.md) for the file map a
 
 Device: VENTUNO Q, ADB serial `3220953353`. Knob: Qwiic/MCU I2C, address `0x3A` detected. Display: **VENTUNO Q built-in 8×13 LED matrix**, no external Pixels module required.
 
+## GPIO / IO
+
+| Signal | Board pin | Electrical behavior | Role and use |
+|---|---|---|---|
+| Red intention LED | D8 | Active-high: `HIGH` = on, `LOW` = off; connect the LED anode to D8 through a current-limiting resistor (330–1,000 Ω) and the cathode to GND | The dashboard turns it on only when the current result has unresolved intent: a context clarification is pending or the translation contains a genuine alternative meaning. It is off for chat-category setup, a resolved match, recording/processing, errors, reset, and new chat. The firmware initializes D8 LOW and the host explicitly clears it during shutdown. |
+
+The LED is driven by the `idk.led` hardware-bridge RPC and is independent of the built-in matrix. Do not connect an LED directly without the series resistor. The documented active-high wiring must match the firmware and host mock tests.
+
 ## Use
 
 Open http://127.0.0.1:8010 on the USB-connected Mac. The server prepares Qwen and Whisper/QNN before enabling input. Models remain loaded across recording start/stop.
@@ -53,6 +61,7 @@ Firmware RPC:
 
 - `idk.read`: JSON string with firmware version, knob health, position, cumulative rotations/clicks/holds, selected zero-based index, state, frame counter and frame hash.
 - `idk.set <state> <selected> <count>`: sets display; selected `-1` preserves the physical selection. Returns a JSON **string**, avoiding an installed router CLI integer-result printing bug.
+- `idk.led <0|1>`: sets the external D8 red intention LED; `1` is on and `0` is off. Returns a JSON string.
 
 Counter checks prove sensor input and rendered-frame changes. They do not replace human visual confirmation of LEDs or audible confirmation of TTS.
 

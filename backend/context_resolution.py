@@ -5,6 +5,7 @@ from idk_client import _INFERENCE_LOCK
 from model_transport import open_model_request
 from translate_sentence import MODEL, select_last_sentence
 from context_catalog import catalog_decision, broad_clarification
+from phrasal_lexicon import find_phrase
 
 SYSTEM=('Determine the intended topic and meaning of SOURCE using only quoted CONTEXT. '
         'If two materially different meanings remain plausible, ask the user rather than translating. '
@@ -56,7 +57,15 @@ def resolve_context(transcript, context='', endpoint=None):
                     and SequenceMatcher(None,*options).ratio()<.7):
                     decision=proposed;decision['decision_method']='qwen_context_options'
         except (ValueError,TypeError,KeyError):pass
-    # An ungrounded model guess is not a usable topic. Offer two honest broad
-    # categories instead of fabricating specific competing meanings.
-    if decision is None:decision=broad_clarification()
+    # An ungrounded model guess is not a usable topic. Normally we fall back to
+    # two honest broad categories. But a known ambiguous phrase (e.g. "make it")
+    # has its own calibrated sense-probability step inside translate(); forcing
+    # a Casual/Professional choice here would block translation from ever
+    # reaching that step, so defer to it instead of asking a useless question.
+    if decision is None:
+        if find_phrase(selected['target']):
+            decision={'needs_clarification':False,'topic':'','evidence':'','question':None,
+                      'options':[],'decision_method':'phrasal_lexicon_deferred'}
+        else:
+            decision=broad_clarification()
     return {**decision,'source':selected['target'],'context':previous}

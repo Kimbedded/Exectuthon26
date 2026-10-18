@@ -26,7 +26,20 @@ def display(selection=None):
     # Current MCU has three digit slots. Word navigation uses cumulative rotation
     # counters and the screen highlight, so never send an out-of-range word index.
     if HARDWARE:
+        HARDWARE.set_red_led(intention_mismatch())
         HARDWARE.display(STAGES.get(STATE['stage'],0),-1 if selection is None else selection,len((STATE.get('pending_context') or {}).get('options',[])) or 0)
+
+def intention_mismatch():
+    """Return whether the current user-visible result has unresolved intent."""
+    if STATE.get('stage') in {'loading','idle','recording','transcribing','thinking','error'}:
+        return False
+    pending=STATE.get('pending_context')
+    if pending and pending.get('kind')!='chat_mode':
+        return True
+    if (STATE.get('context_decision') or {}).get('needs_clarification'):
+        return True
+    alternatives=((STATE.get('event') or {}).get('translation') or {}).get('alternatives') or []
+    return bool(alternatives)
 
 def stage(value):
     STATE['stage']=value;display()
@@ -271,6 +284,7 @@ def reset_chat_state():
     SPEECH_ID+=1
     if HARDWARE:
         HARDWARE.clear_recall()
+        HARDWARE.set_red_led(False)
     if SPEECH is not None and SPEECH.poll() is None:
         SPEECH.terminate()
 
@@ -357,12 +371,15 @@ def speak():
     threading.Thread(target=done,daemon=True).start()
 
 def hardware_error(message):
-    with LOCK:STATE['hardware_error']=message
+    with LOCK:
+        STATE['hardware_error']=message
+        if HARDWARE:HARDWARE.set_red_led(False)
 
 def hardware_sample(value):
     with LOCK:
         if CLOSING:return
         previous=STATE['hardware'];STATE['hardware']=value;STATE['hardware_error']=None
+        display()
         if not previous:return
         changed={key:value[key]-previous[key] for key in ['rotations','clicks','holds']}
         pending=STATE.get('pending_context')
@@ -385,7 +402,9 @@ def hardware_sample(value):
                     threading.Thread(target=save_word_safely,args=(index,generation),daemon=True).start()
                 elif STATE['status']=='recording':analyze()
                 else:start({'language':STATE['source_language'],'target_language':STATE['target_language']})
-        except Exception as error:STATE['error']=str(error)
+        except Exception as error:
+            STATE['error']=str(error)
+            stage('error')
 def schedule_word():
     with LOCK:
         if not STATE.get('words') or STATE.get('pending_context'):return
@@ -575,4 +594,4 @@ if __name__=='__main__':
         if PROCESS is not None:
             try:PROCESS.wait(timeout=195)
             except subprocess.TimeoutExpired:PROCESS.terminate()
-        HARDWARE.close();server.server_close()
+        HARDWARE.set_red_led(False);HARDWARE.close();server.server_close()

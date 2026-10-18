@@ -1,6 +1,6 @@
 import sys,unittest,importlib.util,copy,tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock,patch
 root=Path(__file__).resolve().parents[1]/'live_ui';sys.path.insert(0,str(root))
 from word_recall import RecallTracker
 from hardware_bridge import HardwareBridge
@@ -30,6 +30,7 @@ class RecallTests(unittest.TestCase):
    else:bridge.closed.set()
   def rpc(method,*args):
    if method=='idk.set':sent.append(args);return {}
+   if method=='idk.led':return {}
    return {'firmware':'idk-button-1','state':sent[-1][0],'answer_count':sent[-1][2]}
   bridge.on_sample=sample;bridge.rpc=rpc
   with patch('hardware_bridge.time.monotonic',side_effect=lambda:clock[0]):
@@ -37,9 +38,25 @@ class RecallTests(unittest.TestCase):
   self.assertEqual(sent,[(3,0,0),(2,0,0)])
 class ChatTests(unittest.TestCase):
  def setUp(self):
-  self.old=copy.deepcopy(d.STATE);self.temp=tempfile.TemporaryDirectory();self.patch=patch.object(d,'ROOT',Path(self.temp.name));self.patch.start()
+  self.old=copy.deepcopy(d.STATE);self.old_hardware=d.HARDWARE;self.temp=tempfile.TemporaryDirectory();self.patch=patch.object(d,'ROOT',Path(self.temp.name));self.patch.start()
   d.STATE.update(chat_id='old',chat_mode='Professional',chat_messages=[{'transcript':'old topic'}],model_status='ready',status='recording',stage='ready',session=3,generation=7,live={'transcript':'old words'},frozen_sentence_context='old words',chat_archive=[],vocabulary=[{'expression':'keep','meaning':'유지'}])
- def tearDown(self):d.STATE.clear();d.STATE.update(self.old);self.patch.stop();self.temp.cleanup()
+ def tearDown(self):d.STATE.clear();d.STATE.update(self.old);d.HARDWARE=self.old_hardware;self.patch.stop();self.temp.cleanup()
+ def test_intention_mismatch_turns_led_on_and_resolved_match_turns_it_off(self):
+  hardware=Mock();d.HARDWARE=hardware
+  d.STATE.update(stage='clarifying',pending_context={'kind':'context'},context_decision=None,event=None)
+  d.display()
+  hardware.set_red_led.assert_called_with(True)
+  d.STATE.update(stage='ready',pending_context=None,context_decision={'needs_clarification':False},event={'translation':{'alternatives':[]}})
+  d.display()
+  hardware.set_red_led.assert_called_with(False)
+ def test_error_and_reset_clear_the_red_led(self):
+  hardware=Mock();d.HARDWARE=hardware
+  d.STATE.update(stage='ready',event={'translation':{'alternatives':[{'context':'other'}]}},pending_context=None)
+  d.stage('error')
+  hardware.set_red_led.assert_called_with(False)
+  hardware.reset_mock()
+  d.reset_chat_state()
+  hardware.set_red_led.assert_called_with(False)
  def test_hold_creates_unset_chat_and_empty_pcm_session_while_preserving_archive(self):
   with patch.object(d,'send') as send:d.new_chat()
   self.assertEqual([x.args[0]['action'] for x in send.call_args_list],['stop','start'])

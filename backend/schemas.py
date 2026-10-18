@@ -45,6 +45,9 @@ class TranslationAlternative(BaseModel):
 
     context: str = Field(min_length=1)
     translation: str = Field(min_length=1)
+    # Sampled from the model's own repeated choices (self-consistency), never
+    # self-reported by the model; null when no probability was computed.
+    probability: float | None = Field(default=None, ge=0, le=1)
 
 
 class TranslationResult(BaseModel):
